@@ -1,0 +1,35 @@
+@import "tailwindcss";
+
+/* پس‌زمینه و رنگ متن را ثابت (سفید/تیره) کن */
+html, body {
+  background: #ffffff !important;
+  color: #0f172a !important;
+}
+
+/* هر تغییری از تم تاریک را غیرفعال کن */
+:root {
+  --background: #ffffff !important;
+  --foreground: #0f172a !important;
+}
+
+/* انیمیشن برگ‌های پاییزی */
+@keyframes fall {
+  0% { transform: translateY(-10vh) rotate(0deg); }
+  100% { transform: translateY(110vh) rotate(360deg); }
+}
+.animate-fall {
+  animation-name: fall;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+/* انیمیشن برف زمستانی */
+@keyframes snow {
+  0% { transform: translateY(-10vh); opacity: 0.9; }
+  100% { transform: translateY(110vh); opacity: 0.2; }
+}
+.animate-snow {
+  animation-name: snow;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}

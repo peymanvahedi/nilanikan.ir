@@ -1,0 +1,54 @@
+﻿version: "3.9"
+
+services:
+  db:
+    image: postgres:15
+    container_name: nilanikan-db
+    environment:
+      POSTGRES_DB: shop
+      POSTGRES_USER: shopuser
+      POSTGRES_PASSWORD: shoppass
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  web:
+    build: .
+    container_name: nilanikan-backend
+    depends_on:
+      - db
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - media:/app/media
+      - staticfiles:/app/staticfiles
+    environment:
+      # برای نمایش صحیح تصاویر /media در حالت توسعه، DEBUG را موقتاً True بگذار
+      DJANGO_DEBUG: "True"
+      # حتماً نام سرویس داکر (web) را هم مجاز کن تا درخواست‌هایی با Host=web پذیرفته شوند
+      DJANGO_ALLOWED_HOSTS: "127.0.0.1,localhost,web"
+      # بهتره هر دو اوریجین لوکال را مجاز کنی
+      CORS_ALLOWED_ORIGINS: "http://localhost:3000,http://127.0.0.1:3000"
+      # اگر CSRF داری، این‌ها را هم اضافه کن
+      CSRF_TRUSTED_ORIGINS: "http://localhost:3000,http://127.0.0.1:3000"
+      DB_ENGINE: "django.db.backends.postgresql"
+      DB_NAME: "shop"
+      DB_USER: "shopuser"
+      DB_PASSWORD: "shoppass"
+      DB_HOST: "db"
+      DB_PORT: "5432"
+    command: >
+      sh -lc "python manage.py migrate &&
+      python manage.py collectstatic --noinput &&
+      gunicorn shop_backend.wsgi:application
+      --bind 0.0.0.0:8000
+      --workers=2
+      --threads=2
+      --timeout=120"
+
+volumes:
+  media:
+  staticfiles:
+  db_data:

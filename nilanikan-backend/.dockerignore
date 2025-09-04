@@ -1,0 +1,13 @@
+﻿# چیزهایی که لازم نیست بره داخل ایمیج
+.venv
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+.env
+.git
+.gitignore
+media/
+staticfiles/
+node_modules/
