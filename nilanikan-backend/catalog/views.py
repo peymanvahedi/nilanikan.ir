@@ -1,9 +1,21 @@
-# views.py
 from rest_framework import viewsets, permissions, filters
 from rest_framework.response import Response
+from rest_framework.decorators import api_view, permission_classes
 from django.http import Http404
+
 from .models import Category, Product, Bundle
-from .serializers import CategorySerializer, ProductSerializer, BundleSerializer
+from .serializers import (
+    CategorySerializer,
+    ProductSerializer,
+    BundleSerializer,
+    ProductItemSerializer,
+)
+from banners.models import Slide
+from banners.serializers import SlideSerializer
+
+# 👇 اضافه کردیم
+from stories.models import Story
+from stories.serializers import StorySerializer
 
 
 class IsAdminOrReadOnly(permissions.BasePermission):
@@ -29,10 +41,10 @@ class ProductViewSet(viewsets.ModelViewSet):
     search_fields = ["name", "slug", "sku", "description"]
     ordering_fields = ["price", "created_at"]
 
-    # دسترسی دیتیل با اسلاگ
     lookup_field = "slug"
     lookup_url_kwarg = "slug"
     lookup_value_regex = r"[-\w]+"
+
 
 class BundleViewSet(viewsets.ModelViewSet):
     queryset = Bundle.objects.prefetch_related("products").all()
@@ -41,7 +53,6 @@ class BundleViewSet(viewsets.ModelViewSet):
     filter_backends = [filters.SearchFilter]
     search_fields = ["title", "slug"]
 
-    # دسترسی دیتیل با اسلاگ + فالبک به آیدی
     lookup_field = "slug"
     lookup_url_kwarg = "slug"
     lookup_value_regex = r"[-\w]+"
@@ -60,3 +71,36 @@ class BundleViewSet(viewsets.ModelViewSet):
         self.check_object_permissions(request, obj)
         serializer = self.get_serializer(obj)
         return Response(serializer.data)
+
+
+# ---------------- صفحه اصلی ----------------
+
+@api_view(["GET"])
+@permission_classes([permissions.AllowAny])
+def home_view(request):
+    # نمونه: پرفروش‌ها → اولین 10 محصول فعال
+    best_sellers = Product.objects.filter(is_active=True)[:10]
+
+    # جدیدترین‌ها → آخرین 8 محصول
+    new_arrivals = Product.objects.filter(is_active=True).order_by("-created_at")[:8]
+
+    # اسلایدهای هدر
+    slides = Slide.objects.filter(is_active=True).order_by("order")
+
+    # استوری‌ها
+    stories = Story.objects.all().order_by("-created_at")
+
+    return Response({
+        "stories": StorySerializer(stories, many=True, context={"request": request}).data,
+        "vip": {
+            "endsAt": "2025-12-31T23:59:59Z",
+            "products": [],
+            "seeAllLink": "/vip",
+        },
+        "setsAndPuffer": {"items": []},
+        "miniLooks": [],
+        "bestSellers": ProductItemSerializer(best_sellers, many=True, context={"request": request}).data,
+        "banners": [],
+        "newArrivals": ProductItemSerializer(new_arrivals, many=True, context={"request": request}).data,
+        "heroSlides": SlideSerializer(slides, many=True, context={"request": request}).data,
+    })
