@@ -5,8 +5,8 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import AddToCartButton from "@/components/AddToCartButton";
-import { get, endpoints } from "@/lib/api";
 import ProductTabs from "@/components/ProductTabs";
+import { get, endpoints, absolutizeMedia } from "@/lib/api";
 
 // ---- Types ----
 type SizeChart = {
@@ -36,46 +36,11 @@ type Product = {
   [k: string]: any;
 };
 
-// ---- API + Media bases (کلاینت) ----
-const API_PREFIX = "/api";
-const MEDIA_ORIGIN =
-  (process.env.NEXT_PUBLIC_MEDIA_BASE_URL ??
-    process.env.NEXT_PUBLIC_API_BASE_URL ??
-    process.env.NEXT_PUBLIC_API_URL ??
-    "") // اگر ست نشده باشد، مسیر نسبی برمی‌گردانیم
-    .replace(/\/$/, "")
-    .replace(/\/api$/, "");
-
-const MEDIA_PREFIX = (process.env.NEXT_PUBLIC_MEDIA_PREFIX ?? "/media/").replace(/\/?$/, "/");
-
 // ---- Utils ----
-function toApi(path: string) {
-  if (/^https?:\/\//i.test(path)) return path;
-  const p = path.replace(/^\/+/, "");
-  // اطمینان از فراخوانی از طریق /api تا CORS و دامنه حل شود
-  return `${API_PREFIX}/${p}`;
-}
-
-function absolutizeImagePath(raw?: string | null) {
-  if (!raw) return "";
-  if (/^https?:\/\//i.test(raw)) return raw;
-
-  let path = raw.startsWith("/") ? raw : `/${raw}`;
-
-  if (!path.startsWith(MEDIA_PREFIX)) {
-    if (/^\/?(slides|banners|uploads|media)\//i.test(path)) {
-      if (!/^\/?media\//i.test(path)) path = `${MEDIA_PREFIX}${path.replace(/^\//, "")}`;
-    } else {
-      path = `${MEDIA_PREFIX}${path.replace(/^\//, "")}`;
-    }
-  }
-
-  return MEDIA_ORIGIN ? `${MEDIA_ORIGIN}${path}` : path;
-}
-
 function resolveImage(src?: string | null, seed?: string) {
-  const absolute = absolutizeImagePath(src || undefined);
+  const absolute = absolutizeMedia(src || undefined);
   if (absolute) return absolute;
+  // آخرین راه‌حل: عکس رندوم (برای اینکه حتماً چیزی ببینیم)
   return `https://picsum.photos/seed/${encodeURIComponent(seed || "prod")}/1200/1200`;
 }
 function toFa(n: number) {
@@ -86,7 +51,10 @@ function escapeHtml(s: string) {
 }
 function toDescriptionHtml(desc?: string | null): string {
   if (!desc) return "";
-  const parts = desc.split(/\n{2,}/g).map((p) => p.trim()).filter(Boolean);
+  const parts = desc
+    .split(/\n{2,}/g)
+    .map((p) => p.trim())
+    .filter(Boolean);
   if (parts.length === 0) return "";
   return parts.map((p) => `<p>${escapeHtml(p)}</p>`).join("");
 }
@@ -111,7 +79,7 @@ function MobileGallery({ images, alt }: { images: string[]; alt: string }) {
             "
           >
             <Image
-              src={src || "/placeholder.png"}
+              src={src || "/placeholder.svg"}
               alt={alt}
               fill
               className="object-cover"
@@ -136,7 +104,7 @@ function DesktopGallery({
   active: number;
   setActive: (i: number) => void;
 }) {
-  const main = images[active] || images[0] || "/placeholder.png";
+  const main = images[active] || images[0] || "/placeholder.svg";
   return (
     <div className="hidden lg:grid grid-cols-[80px_1fr] gap-4">
       <div className="flex flex-col gap-2 overflow-y-auto max-h-[520px] pr-1">
@@ -150,7 +118,7 @@ function DesktopGallery({
             aria-label={`تصویر ${i + 1}`}
           >
             <Image
-              src={src || "/placeholder.png"}
+              src={src || "/placeholder.svg"}
               alt={alt}
               fill
               className="object-cover"
@@ -161,7 +129,7 @@ function DesktopGallery({
       </div>
       <div className="relative aspect-[4/5] w-full rounded-2xl ring-1 ring-zinc-200 overflow-hidden">
         <Image
-          src={main || "/placeholder.png"}
+          src={main || "/placeholder.svg"}
           alt={alt}
           fill
           className="object-cover"
@@ -189,7 +157,7 @@ function RelatedSlider({ items }: { items: Product[] }) {
             (Array.isArray(p.images) && p.images[0]) ||
             (Array.isArray(p.gallery) && (p.gallery as any[])[0]?.image) ||
             p.image ||
-            "/placeholder.png";
+            "/placeholder.svg";
           const src = resolveImage(img, p.slug || String(p.id));
           const hasOff = !!p.discount_price && Number(p.discount_price) < Number(p.price);
           const off =
@@ -208,7 +176,7 @@ function RelatedSlider({ items }: { items: Product[] }) {
             >
               <div className="relative aspect-[4/5] w-full overflow-hidden rounded-xl ring-1 ring-zinc-100">
                 <Image
-                  src={src || "/placeholder.png"}
+                  src={src || "/placeholder.svg"}
                   alt={p.name}
                   fill
                   className="object-cover"
@@ -251,16 +219,16 @@ export default function ProductPage() {
   const [related, setRelated] = useState<Product[]>([]);
   const [relatedLoading, setRelatedLoading] = useState(false);
 
-  // fetch product (از طریق /api تا خطای CORS/host نداشته باشیم)
+  // fetch product از /api/* (به‌صورت استاندارد از lib/api)
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
         setLoading(true);
-        const url = toApi(`${endpoints.products}${slug}/`);
-        const data = await get(url, { cache: "no-store" } as any);
+        const path = `${endpoints.products}${encodeURIComponent(slug)}/`;
+        const data = await get<Product>(path, { throwOnHTTP: true });
         if (!alive) return;
-        setProduct(data as Product);
+        setProduct(data);
       } catch (e: any) {
         if (!alive) return;
         setErr(e?.message || "خطا در دریافت اطلاعات محصول");
@@ -295,7 +263,7 @@ export default function ProductPage() {
         else if (product.brand) url += `&brand=${encodeURIComponent(product.brand)}`;
         if (product.id != null) url += `&exclude=${product.id}`;
 
-        const list = await get(toApi(url), { cache: "no-store" } as any);
+        const list = await get<any>(url, { throwOnHTTP: false, fallback: { results: [] } });
         if (!alive) return;
 
         const items: Product[] = Array.isArray(list?.results)
@@ -438,7 +406,7 @@ export default function ProductPage() {
                 id={Number(product.id)}
                 price={Number(product.discount_price ?? product.price)}
                 name={product.name}
-                image={images[0] || "/placeholder.png"}
+                image={images[0] || "/placeholder.svg"}
                 className="h-12 w-full rounded-xl bg-pink-600 font-bold text-white hover:bg-pink-700"
               />
             </div>

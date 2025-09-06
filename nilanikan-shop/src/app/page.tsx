@@ -10,51 +10,20 @@ import BestSellersSlider from "../components/BestSellersSlider";
 import BannersRow from "../components/BannersRow";
 import NewArrivalsSlider from "../components/NewArrivalsSlider";
 import type { Slide } from "@/types/home";
+import { fetchHome } from "@/lib/api";
 
-/* ---------------- Types ---------------- */
-type BannerApiItem = {
-  id: number | string;
-  image?: string;
-  imageUrl?: string;
-  href?: string | null;
-  alt?: string | null;
-  title?: string | null;
-};
-
-type BannersApiResponse =
-  | BannerApiItem[]
-  | { count: number; next: string | null; previous: string | null; results: BannerApiItem[] };
-
-type HomeData = {
-  stories?: any[];
-  vip?: { endsAt?: string; products?: any[]; seeAllLink?: string };
-  setsAndPuffer?: { items?: any[] };
-  miniLooks?: any[];
-  bestSellers?: any[];
-  banners?: BannersApiResponse;
-  newArrivals?: any[];
-  heroSlides?: Slide[];
-};
-
-/* -------- فقط از پروکسی Next استفاده کن -------- */
-const API_PREFIX = "/api"; // همهٔ درخواست‌ها از همین مسیر بروند تا با rewrites → INTERNAL_API_URL پروکسی شوند
-
+/* -------- MEDIA helpers (برای بنر) -------- */
 const MEDIA_ORIGIN = (
   process.env.NEXT_PUBLIC_MEDIA_BASE_URL ??
   process.env.NEXT_PUBLIC_API_BASE_URL ??
   process.env.NEXT_PUBLIC_API_URL ??
   ""
 ).replace(/\/$/, "").replace(/\/api$/, "");
-
 const MEDIA_PREFIX = (process.env.NEXT_PUBLIC_MEDIA_PREFIX ?? "/media/").replace(/\/?$/, "/");
-
-/* -------- HELPERS -------- */
-const toApi = (path: string) => `${API_PREFIX}/${path.replace(/^\/+/, "")}`;
 
 const absolutize = (url?: string | null): string => {
   if (!url) return "";
   if (/^https?:\/\//i.test(url)) return url;
-
   let path = url.startsWith("/") ? url : `/${url}`;
   if (!path.startsWith(MEDIA_PREFIX)) {
     if (/^\/?(slides|banners|uploads|media)\//i.test(path)) {
@@ -63,15 +32,19 @@ const absolutize = (url?: string | null): string => {
       path = `${MEDIA_PREFIX}${path.replace(/^\//, "")}`;
     }
   }
-  return MEDIA_ORIGIN ? `${MEDIA_ORIGIN}${path}` : path; // اگر CDN نداری همون /media/... می‌مونه
+  return MEDIA_ORIGIN ? `${MEDIA_ORIGIN}${path}` : path;
 };
+
+type BannerApiItem = { id: number | string; image?: string; imageUrl?: string; href?: string | null; alt?: string | null; title?: string | null; };
+type BannersApiResponse =
+  | BannerApiItem[]
+  | { count: number; next: string | null; previous: string | null; results: BannerApiItem[] };
 
 function extractBanners(b: BannersApiResponse | undefined): BannerApiItem[] {
   if (!b) return [];
   if (Array.isArray(b)) return b;
   return Array.isArray(b.results) ? b.results : [];
 }
-
 function mapBannersToSlides(banners: BannerApiItem[]): Slide[] {
   return (banners ?? [])
     .map((b, i) => ({
@@ -84,44 +57,14 @@ function mapBannersToSlides(banners: BannerApiItem[]): Slide[] {
     .filter((s) => !!s.imageUrl);
 }
 
-/* --------- SSR fetch از طریق /api (پروکسی Next) --------- */
-async function fetchHomeSSR(): Promise<HomeData> {
-  try {
-    const res = await fetch(toApi("home/"), { cache: "no-store", next: { revalidate: 0 } });
-    if (res.ok) return (await res.json()) as HomeData;
-  } catch {}
-  return {
-    stories: [],
-    vip: { endsAt: new Date().toISOString(), products: [], seeAllLink: "/vip" },
-    setsAndPuffer: { items: [] },
-    miniLooks: [],
-    bestSellers: [],
-    banners: [],
-    newArrivals: [],
-    heroSlides: [],
-  };
-}
-
 /* ---------------- Page ---------------- */
 export default async function Page() {
-  // ✅ برگشت به مدل درست: فقط از /api/* بخوان تا اتصال بک‌اند/فرانت از طریق rewrites برقرار باشد
-  const data = await fetchHomeSSR();
+  // ✅ دادهٔ خانه از کلاینت مرکزی (نرمالایز + فالبک)
+  const data = await fetchHome();
 
+  // slides از خود API اگر بود، همان را بگیر؛ وگرنه از banners بساز
   const bannersFromHome = Array.isArray(data.heroSlides) ? data.heroSlides : [];
-
-  // fallback بنرها
-  let bannerItems = extractBanners(data.banners);
-  if (!bannerItems.length) {
-    try {
-      const res = await fetch(toApi("banners/"), { cache: "no-store", next: { revalidate: 0 } });
-      if (!res.ok) throw new Error(`Failed to fetch banners: ${res.status}`);
-      const json = await res.json();
-      bannerItems = Array.isArray(json) ? json : (json.results ?? []);
-    } catch {
-      bannerItems = [];
-    }
-  }
-
+  const bannerItems = extractBanners(data.banners);
   const heroSlides: Slide[] =
     bannersFromHome.length > 0
       ? bannersFromHome.map((s: any, i: number) => ({

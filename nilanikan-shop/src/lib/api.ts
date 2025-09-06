@@ -9,6 +9,36 @@ const MEDIA_ORIGIN = (process.env.NEXT_PUBLIC_MEDIA_BASE_URL ??
   .replace(/\/$/, "")
   .replace(/\/api$/, "");
 
+/* ========= Origin helpers (for SSR absolute URLs) ========= */
+function getAppOrigin(): string {
+  if (typeof window !== "undefined") return ""; // در کلاینت لازم نیست
+  // اولویت: متغیرهای محیطی صریح
+  const envUrl =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.APP_URL ||
+    process.env.SITE_URL ||
+    process.env.PUBLIC_ORIGIN;
+  if (envUrl) return envUrl.replace(/\/$/, "");
+  // Vercel
+  const vercel = process.env.VERCEL_URL;
+  if (vercel) return `https://${vercel.replace(/\/$/, "")}`;
+  // GitHub Codespaces
+  const csName = process.env.CODESPACE_NAME;
+  const csDomain = process.env.GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN;
+  if (csName && csDomain) {
+    // پیش‌فرض پورت 3000 برای Next dev
+    return `https://${csName}-3000.${csDomain}`.replace(/\/$/, "");
+  }
+  // fallback لوکال
+  return "http://localhost:3000";
+}
+function ensureAbsolute(u: string): string {
+  if (/^https?:\/\//i.test(u)) return u;
+  const origin = getAppOrigin();
+  if (u.startsWith("/")) return `${origin}${u}`;
+  return `${origin}/${u.replace(/^\/+/, "")}`;
+}
+
 /* ===================== Endpoints ===================== */
 export const endpoints = {
   home: "home/",
@@ -144,7 +174,10 @@ export function buildQuery(params?: Record<string, any>): string {
 }
 
 async function request<T = any>(path: string, init: RequestInit = {}, opts?: ReqOpts): Promise<T> {
-  const url = toApi(path);
+  // 1) مسیر نسبی API → مطلق برای SSR
+  const urlRel = toApi(path);
+  const url = ensureAbsolute(urlRel);
+
   const headers = new Headers(init.headers || {});
   if (!headers.has("Accept")) headers.set("Accept", "application/json, text/plain;q=0.9,*/*;q=0.8");
   if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
@@ -161,7 +194,7 @@ async function request<T = any>(path: string, init: RequestInit = {}, opts?: Req
       next: { revalidate: 0, ...(opts?.init as any)?.next },
       ...init,
       headers,
-      credentials: init.credentials ?? "include", // 🔑 تغییر اصلی
+      credentials: init.credentials ?? "include",
     });
 
   let res = await doFetch();
@@ -171,7 +204,7 @@ async function request<T = any>(path: string, init: RequestInit = {}, opts?: Req
     const refresh = getStoredRefresh();
     if (refresh) {
       try {
-        const rr = await fetch(toApi(endpoints.auth.refresh), {
+        const rr = await fetch(ensureAbsolute(toApi(endpoints.auth.refresh)), {
           method: "POST",
           headers: { "Content-Type": "application/json", Accept: "application/json" },
           body: JSON.stringify({ refresh }),
@@ -213,7 +246,7 @@ async function request<T = any>(path: string, init: RequestInit = {}, opts?: Req
 
 /* ===================== Public helpers ===================== */
 export const get = <T = any>(path: string, opts?: ReqOpts) =>
-  request<T>(path, { method: "GET" }, opts);
+  request<T>(path, opts?.init ?? {}, opts);
 
 export const post = <T = any>(path: string, body?: any, opts?: ReqOpts) =>
   request<T>(
@@ -222,12 +255,13 @@ export const post = <T = any>(path: string, body?: any, opts?: ReqOpts) =>
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: body ? JSON.stringify(body) : undefined,
+      ...(opts?.init ?? {}),
     },
     opts,
   );
 
 export const del = <T = any>(path: string, opts?: ReqOpts) =>
-  request<T>(path, { method: "DELETE" }, opts);
+  request<T>(path, { method: "DELETE", ...(opts?.init ?? {}) }, opts);
 
 /* ===================== Home helpers (اختیاری) ===================== */
 import type { HomePayload, ProductItem } from "@/types/home";
@@ -342,7 +376,18 @@ async function fetchBannersFallback() {
 
 /* ===================== fetchHome ===================== */
 export async function fetchHome() {
-  const base = await get<HomePayload>(endpoints.home, { throwOnHTTP: true });
+  let base: any = {};
+  try {
+    // قبلاً throwOnHTTP: true بود و باعث کرش می‌شد
+    base = await get<HomePayload>(endpoints.home, { throwOnHTTP: true });
+  } catch (e) {
+    // ۵۰۰ یا هر خطای دیگری → ادامه بده با فالبک
+    base = {};
+    // اختیاری: برای دیباگ لاگ کن
+    if (typeof console !== "undefined") {
+      console.error("[fetchHome] failed to load home/:", e);
+    }
+  }
 
   // VIP
   let vip = (base as any)?.vip;
@@ -360,10 +405,10 @@ export async function fetchHome() {
     setsAndPuffer = { ...setsAndPuffer, items: (setsAndPuffer.items || []).map(normalizeAnyProduct) };
   }
 
-  // Banners
+  // Banners (با فالبک امن)
   const banners = (base as any)?.banners ?? (await fetchBannersFallback());
 
-  // heroSlides
+  // heroSlides (اگر نبود، از بنرها می‌سازیم در صفحه)
   const heroSlides =
     Array.isArray((base as any)?.heroSlides) && (base as any).heroSlides.length
       ? (base as any).heroSlides

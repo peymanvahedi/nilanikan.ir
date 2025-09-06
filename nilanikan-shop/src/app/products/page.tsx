@@ -1,227 +1,166 @@
-"use client";
+// src/app/products/page.tsx
+import ProductCard from "@/components/ProductCard";
+import { get, endpoints, buildQuery } from "@/lib/api";
+import type { Metadata, ResolvingMetadata } from "next";
 
-import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import Link from "next/link";
-import { fetchProducts, post, endpoints } from "@/lib/api";
-import type { ProductItem } from "@/types/home";
+type SizeRow = {
+  size: string;
+  chest: number;
+  waist: number;
+  hip: number;
+  sleeve: number;
+  pantsLength: number;
+};
 
-type LoadState = "idle" | "loading" | "done" | "error";
+type ProductListItem = {
+  id: number | string;
+  slug: string;
+  name: string;
+  price: number;
+  discount_price?: number | null;
+  image?: string | null;
+  images?: Array<string | null> | null;
+  gallery?: Array<{ image?: string | null }> | null;
+  sizeChart?: SizeRow[];
+};
 
-function ProductCard({
-  p,
-  onAdd,
-  busy,
-}: {
-  p: ProductItem;
-  onAdd: (p: ProductItem) => void;
-  busy: boolean;
-}) {
-  const hasDiscount =
-    typeof p.compareAtPrice === "number" && p.compareAtPrice > (p.price ?? 0);
-  const percent = hasDiscount
-    ? Math.round(((p.compareAtPrice! - (p.price ?? 0)) / p.compareAtPrice!) * 100)
-    : 0;
+type ProductsResponse =
+  | { results: ProductListItem[]; count?: number; next?: string | null; previous?: string | null }
+  | ProductListItem[];
 
-  return (
-    <div className="border rounded-xl p-3">
-      <Link href={p.link || "#"} className="block group">
-        <div className="aspect-[3/4] rounded-lg overflow-hidden bg-gray-50">
-          <img
-            src={p.imageUrl}
-            alt={p.title}
-            className="w-full h-full object-cover group-hover:scale-105 transition"
-            loading="lazy"
-          />
-        </div>
-        <div className="mt-2 text-sm line-clamp-2">{p.title}</div>
-      </Link>
+export const dynamic = "force-dynamic"; // یا: export const revalidate = 0;
 
-      <div className="flex items-center gap-2 mt-2 text-sm">
-        {typeof p.price === "number" && (
-          <span className="font-bold">{p.price.toLocaleString()} تومان</span>
-        )}
-        {hasDiscount && (
-          <>
-            <del className="text-xs text-gray-400">
-              {p.compareAtPrice!.toLocaleString()}
-            </del>
-            <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">
-              %{percent}
-            </span>
-          </>
-        )}
-      </div>
+// ⬇️ متادیتای داینامیک (جایگزین export const metadata)
+type PageProps = { searchParams: Record<string, string | string[] | undefined> };
 
-      <button
-        onClick={() => onAdd(p)}
-        disabled={busy}
-        className="mt-3 w-full bg-black text-white rounded-lg py-2 text-sm disabled:opacity-60"
-      >
-        {busy ? "در حال افزودن..." : "افزودن به سبد"}
-      </button>
-    </div>
-  );
+export async function generateMetadata(
+  { searchParams }: PageProps,
+  _parent: ResolvingMetadata
+): Promise<Metadata> {
+  const page = Number(searchParams.page ?? "1") || 1;
+  const q = typeof searchParams.q === "string" ? searchParams.q.trim() : "";
+  const brand = typeof searchParams.brand === "string" ? searchParams.brand : "";
+  const category = typeof searchParams.category === "string" ? searchParams.category : "";
+
+  const titleBits = ["محصولات"];
+  if (q) titleBits.push(`جستجو: ${q}`);
+  if (brand) titleBits.push(`برند: ${brand}`);
+  if (category) titleBits.push(`دسته: ${category}`);
+  if (page > 1) titleBits.push(`صفحه ${page}`);
+
+  const title = `${titleBits.join(" | ")} | نیلانیکان`;
+  const desc =
+    q || brand || category
+      ? `مرور ${q ? `نتایج «${q}»` : "محصولات"} ${brand ? `برند ${brand}` : ""} ${category ? `در دسته ${category}` : ""}${page > 1 ? ` - صفحه ${page}` : ""}.`
+      : `لیست محصولات فروشگاه نیلانیکان${page > 1 ? ` - صفحه ${page}` : ""}.`;
+
+  return {
+    title,
+    description: desc,
+    openGraph: { title, description: desc, type: "website" },
+    twitter: { card: "summary", title, description: desc },
+  };
 }
 
-export default function ProductsPage() {
-  const sp = useSearchParams();
-  const tab = (sp.get("tab") || "").toLowerCase(); // "", "sets"
+function listify(x: ProductsResponse): ProductListItem[] {
+  return Array.isArray(x) ? x : Array.isArray(x.results) ? x.results : [];
+}
+function getCount(x: ProductsResponse): number | undefined {
+  return Array.isArray(x) ? x.length : x.count;
+}
 
-  const [items, setItems] = useState<ProductItem[]>([]);
-  const [loading, setLoading] = useState<LoadState>("idle");
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [msg, setMsg] = useState<string>("");
+export default async function ProductsPage({ searchParams }: PageProps) {
+  const page = Number(searchParams.page ?? "1") || 1;
+  const limit = Number(searchParams.limit ?? "24") || 24;
 
-  useEffect(() => {
-    let cancelled = false;
+  // فیلترهای اختیاری
+  const category = typeof searchParams.category === "string" ? searchParams.category : undefined;
+  const brand = typeof searchParams.brand === "string" ? searchParams.brand : undefined;
+  const q = typeof searchParams.q === "string" ? searchParams.q : undefined;
 
-    (async () => {
-      setLoading("loading");
-      setMsg("");
-      try {
-        if (tab === "sets") {
-          // فقط «ست‌ها»: تگ‌های معادل ست
-          const setTags = ["set", "sets", "ست", "ست‌ها"];
-          const acc: ProductItem[] = [];
-          for (const t of setTags) {
-            const r = await fetchProducts({ tag: t, limit: 40 });
-            const list = Array.isArray(r?.results)
-              ? r.results
-              : Array.isArray(r as any)
-              ? (r as any)
-              : [];
-            for (const it of list as any[]) {
-              const id = String((it as any).id ?? "");
-              if (!acc.find((x) => x.id === id)) acc.push(it as ProductItem);
-            }
-          }
-          if (!cancelled) {
-            setItems(acc);
-            setLoading("done");
-          }
-        } else {
-          // تب «همه»
-          const r = await fetchProducts({ limit: 40 });
-          const list = Array.isArray(r?.results)
-            ? r.results
-            : Array.isArray(r as any)
-            ? (r as any)
-            : [];
-          if (!cancelled) {
-            setItems(list as ProductItem[]);
-            setLoading("done");
-          }
-        }
-      } catch {
-        if (!cancelled) {
-          setLoading("error");
-          setMsg("خطا در بارگذاری محصولات");
-        }
-      }
-    })();
+  const query = buildQuery({
+    page,
+    limit,
+    ...(category ? { category } : {}),
+    ...(brand ? { brand } : {}),
+    ...(q ? { search: q } : {}),
+  });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [tab]);
+  const data = await get<ProductsResponse>(`${endpoints.products}${query}`, {
+    throwOnHTTP: false,
+    fallback: { results: [] },
+  });
 
-  // مرتب‌سازی ساده: ارزان‌ترها جلوتر
-  const sorted = useMemo(() => {
-    return [...items].sort((a, b) => {
-      const pa =
-        typeof a.price === "number" ? a.price : Number.MAX_SAFE_INTEGER;
-      const pb =
-        typeof b.price === "number" ? b.price : Number.MAX_SAFE_INTEGER;
-      return pa - pb;
-    });
-  }, [items]);
-
-  // افزودن به سبد (payloadهای رایج)
-  const addToCart = async (p: ProductItem) => {
-    try {
-      setBusyId(p.id);
-      setMsg("");
-      const candidates = [
-        { product: p.id, quantity: 1 },
-        { product_id: p.id, quantity: 1 },
-        { item: p.id, quantity: 1 },
-        { id: p.id, quantity: 1 },
-      ];
-      let ok = false;
-      let lastError = "";
-      for (const body of candidates) {
-        try {
-          const resp = await post(endpoints.cart, body, { throwOnHTTP: true });
-          if (resp) {
-            ok = true;
-            break;
-          }
-        } catch (err: any) {
-          lastError = err?.message || "خطا";
-        }
-      }
-      setMsg(ok ? "به سبد خرید اضافه شد ✅" : `عدم موفقیت در افزودن ❌ ${lastError}`);
-    } finally {
-      setBusyId(null);
-      setTimeout(() => setMsg(""), 2500);
-    }
-  };
+  const items = listify(data);
+  const total = getCount(data);
 
   return (
-    <main className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">
-          {tab === "sets" ? "ست‌ها" : "محصولات"}
-        </h1>
-        <Link href="/" className="underline">
-          بازگشت به خانه
-        </Link>
-      </div>
+    <main className="container mx-auto px-4 py-6" dir="rtl">
+      <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-xl md:text-2xl font-bold">محصولات</h1>
 
-      {/* تب‌ها */}
-      <div className="flex gap-3 text-sm">
-        <Link
-          href="/products"
-          className={`px-3 py-1 rounded-full border ${
-            tab !== "sets" ? "bg-black text-white" : ""
-          }`}
-        >
-          همه
-        </Link>
-        <Link
-          href="/products?tab=sets"
-          className={`px-3 py-1 rounded-full border ${
-            tab === "sets" ? "bg-black text-white" : ""
-          }`}
-        >
-          ست‌ها
-        </Link>
-      </div>
+        {/* نوار فیلتر ساده */}
+        <form method="get" className="flex gap-2 text-sm">
+          <input name="q" defaultValue={q} placeholder="جستجو…" className="h-9 rounded-lg border border-zinc-300 px-3" />
+          <input name="category" defaultValue={category} placeholder="دسته‌بندی" className="h-9 rounded-lg border border-zinc-300 px-3" />
+          <input name="brand" defaultValue={brand} placeholder="برند" className="h-9 rounded-lg border border-zinc-300 px-3" />
+          <button className="h-9 rounded-lg bg-pink-600 px-4 font-bold text-white hover:bg-pink-700" type="submit">اعمال</button>
+        </form>
+      </header>
 
-      {loading === "loading" && (
-        <div className="text-sm text-gray-500">در حال بارگذاری…</div>
-      )}
-      {loading === "error" && (
-        <div className="text-sm text-red-600">
-          {msg || "خطایی رخ داد"}
+      {items.length === 0 ? (
+        <p className="text-sm text-zinc-500">فعلاً محصولی یافت نشد.</p>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          {items.map((p) => (
+            <ProductCard
+              key={p.slug ?? p.id}
+              id={p.id}
+              slug={p.slug}
+              name={p.name}
+              price={Number(p.price)}
+              discount_price={typeof p.discount_price === "number" ? p.discount_price : undefined}
+              image={p.image ?? undefined}
+              images={p.images ?? undefined}
+              gallery={p.gallery ?? undefined}
+              sizeChart={p.sizeChart}
+            />
+          ))}
         </div>
       )}
-      {loading === "done" && sorted.length === 0 && (
-        <div className="text-sm text-gray-500">محصولی یافت نشد.</div>
-      )}
-      {msg && loading !== "loading" && <div className="text-sm">{msg}</div>}
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-        {sorted.map((p) => (
-          <ProductCard
-            key={p.id}
-            p={p}
-            onAdd={addToCart}
-            busy={busyId === p.id}
-          />
-        ))}
-      </div>
+      {/* Pagination */}
+      <nav className="mt-8 flex items-center justify-center gap-2 text-sm">
+        {page > 1 && (
+          <a
+            href={`?${new URLSearchParams({
+              ...((q && { q }) || {}),
+              ...((brand && { brand }) || {}),
+              ...((category && { category }) || {}),
+              limit: String(limit),
+              page: String(page - 1),
+            }).toString()}`}
+            className="rounded-lg border border-zinc-300 px-3 py-1 hover:bg-zinc-50"
+          >
+            قبلی
+          </a>
+        )}
+        <span className="px-3 py-1">صفحه {page}</span>
+        {total == null || total > page * limit ? (
+          <a
+            href={`?${new URLSearchParams({
+              ...((q && { q }) || {}),
+              ...((brand && { brand }) || {}),
+              ...((category && { category }) || {}),
+              limit: String(limit),
+              page: String(page + 1),
+            }).toString()}`}
+            className="rounded-lg border border-zinc-300 px-3 py-1 hover:bg-zinc-50"
+          >
+            بعدی
+          </a>
+        ) : null}
+      </nav>
     </main>
   );
 }

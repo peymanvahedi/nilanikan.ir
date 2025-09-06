@@ -6,8 +6,8 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import AddToCartButton from "@/components/AddToCartButton";
-import { get, endpoints } from "@/lib/api";
 import ProductTabs from "@/components/ProductTabs";
+import { get, endpoints, toApi, absolutizeMedia } from "@/lib/api";
 
 /* ---------- Types ---------- */
 type SizeChart = {
@@ -47,59 +47,25 @@ type Bundle = {
   slug: string;
   name: string;
   description?: string | null;
-  price: number;                // قیمت نهایی باندل
+  price: number; // قیمت نهایی باندل
   compare_at_price?: number | null; // جمع تکی‌ها یا قیمت بدون تخفیف
-  discount_price?: number | null;   // اگر API به همین شکل می‌دهد
+  discount_price?: number | null; // اگر API به همین شکل می‌دهد
   image?: string | null;
   images?: string[];
   gallery?: { id: number; image: string; alt?: string | null }[];
   items?: BundleItem[];
   attributes?: Record<string, string | string[] | number | boolean>;
-  size_chart?: SizeChart | null; // اگر برای باندل معنی دارد
+  size_chart?: SizeChart | null;
   brand?: string | null;
   category?: string | number | null;
   category_slug?: string | null;
   [k: string]: any;
 };
 
-/* ---------- API + Media bases (کلاینت) ---------- */
-const API_PREFIX = "/api";
-const MEDIA_ORIGIN = (process.env.NEXT_PUBLIC_MEDIA_BASE_URL ??
-  process.env.NEXT_PUBLIC_API_BASE_URL ??
-  process.env.NEXT_PUBLIC_API_URL ??
-  "")
-  .replace(/\/$/, "")
-  .replace(/\/api$/, "");
-
-const MEDIA_PREFIX = (process.env.NEXT_PUBLIC_MEDIA_PREFIX ?? "/media/").replace(/\/?$/, "/");
-
 /* ---------- Utils ---------- */
-function toApi(path: string) {
-  if (/^https?:\/\//i.test(path)) return path;
-  const p = path.replace(/^\/+/, "");
-  return `${API_PREFIX}/${p}`;
-}
-
-function absolutizeImagePath(raw?: string | null) {
-  if (!raw) return "";
-  if (/^https?:\/\//i.test(raw)) return raw;
-
-  let path = raw.startsWith("/") ? raw : `/${raw}`;
-
-  if (!path.startsWith(MEDIA_PREFIX)) {
-    if (/^\/?(slides|banners|uploads|media)\//i.test(path)) {
-      if (!/^\/?media\//i.test(path)) path = `${MEDIA_PREFIX}${path.replace(/^\//, "")}`;
-    } else {
-      path = `${MEDIA_PREFIX}${path.replace(/^\//, "")}`;
-    }
-  }
-
-  return MEDIA_ORIGIN ? `${MEDIA_ORIGIN}${path}` : path;
-}
-
 function resolveImage(src?: string | null, seed?: string) {
-  const absolute = absolutizeImagePath(src || undefined);
-  if (absolute) return absolute;
+  const abs = absolutizeMedia(src || undefined);
+  if (abs) return abs;
   return `https://picsum.photos/seed/${encodeURIComponent(seed || "bundle")}/1200/1200`;
 }
 function toFa(n: number) {
@@ -132,6 +98,7 @@ function MobileGallery({ images, alt }: { images: string[]; alt: string }) {
     </div>
   );
 }
+
 function DesktopGallery({
   images,
   alt,
@@ -190,7 +157,7 @@ function RelatedBundles({ items }: { items: Bundle[] }) {
             <Link
               key={b.slug ?? b.id}
               href={`/bundle/${b.slug ?? b.id}`}
-              className="snap-center relative flex-shrink-0 w-[68%] sm:w-[40%] lg:w-[22%] rounded-2xl border border-zinc-200 bg-white p-3 hover:shadow-sm transition"
+              className="snap-center relative flex-shrink-0 w=[68%] sm:w-[40%] lg:w-[22%] rounded-2xl border border-zinc-200 bg-white p-3 hover:shadow-sm transition"
             >
               <div className="relative aspect-[4/5] w-full overflow-hidden rounded-xl ring-1 ring-zinc-100">
                 <Image src={src || "/placeholder.png"} alt={b.name} fill className="object-cover" sizes="(min-width:1024px) 240px, 70vw" />
@@ -206,8 +173,7 @@ function RelatedBundles({ items }: { items: Bundle[] }) {
                   {hasOff && <del className="text-xs text-zinc-400">{toFa(base)}</del>}
                 </div>
                 <div className="text-pink-600 font-extrabold">
-                  {toFa(final)}
-                  <span className="text-[11px] mr-1">تومان</span>
+                  {toFa(final)} <span className="text-[11px] mr-1">تومان</span>
                 </div>
               </div>
             </Link>
@@ -231,9 +197,8 @@ export default function BundlePage() {
   const [related, setRelated] = useState<Bundle[]>([]);
   const [relatedLoading, setRelatedLoading] = useState(false);
 
-  // endpoints.bundles باید در src/lib/api تعریف شده باشد.
-  // اگر نیست، این fallback کار می‌کند.
-  const bundlesEndpoint = (endpoints as any)?.bundles ?? "bundles/";
+  // endpoints.bundles باید در src/lib/api تعریف شده باشد (هست).
+  const bundlesEndpoint = endpoints.bundles;
 
   // fetch bundle
   useEffect(() => {
@@ -242,9 +207,9 @@ export default function BundlePage() {
       try {
         setLoading(true);
         const url = toApi(`${bundlesEndpoint}${slug}/`);
-        const data = await get(url, { cache: "no-store" } as any);
+        const data = await get<Bundle>(url, { init: { cache: "no-store", next: { revalidate: 0 } as any } } as any);
         if (!alive) return;
-        setBundle(data as Bundle);
+        setBundle(data);
       } catch (e: any) {
         if (!alive) return;
         setErr(e?.message || "خطا در دریافت اطلاعات باندل");
@@ -257,7 +222,7 @@ export default function BundlePage() {
     };
   }, [slug, bundlesEndpoint]);
 
-  // fetch related bundles (by category or tag if available)
+  // fetch related bundles (by category if available)
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -270,7 +235,8 @@ export default function BundlePage() {
           (typeof bundle.category === "string" ? bundle.category : undefined);
         if (cat) url += `&category=${encodeURIComponent(cat)}`;
         if (bundle.id != null) url += `&exclude=${bundle.id}`;
-        const list = await get(toApi(url), { cache: "no-store" } as any);
+
+        const list = await get<any>(toApi(url), { init: { cache: "no-store" } } as any);
         if (!alive) return;
 
         const items: Bundle[] = Array.isArray(list?.results)
@@ -362,6 +328,7 @@ export default function BundlePage() {
         {/* Details */}
         <section className="lg:col-start-2 lg:col-end-3">
           <h1 className="text-lg md:text-xl lg:text-2xl font-bold text-zinc-900">{bundle.name}</h1>
+
           {/* آیتم‌های داخل باندل */}
           {Array.isArray(bundle.items) && bundle.items.length > 0 && (
             <div className="mt-6 space-y-3">
@@ -398,7 +365,7 @@ export default function BundlePage() {
               </ul>
 
               {/* جمع تکی‌ها اگر compare_at_price نداشت */}
-              {(!basePrice && itemsTotal > 0) && (
+              {!basePrice && itemsTotal > 0 && (
                 <div className="text-xs text-zinc-500">
                   جمع قیمت آیتم‌ها (تکی): <span className="font-bold">{toFa(itemsTotal)}</span> تومان
                 </div>
@@ -466,7 +433,7 @@ export default function BundlePage() {
         <ProductTabs
           features={features}
           description={descriptionHtml}
-          sizeChart={undefined} // معمولاً برای باندل لازم نیست
+          sizeChart={undefined}
           reviewsEnabled={false}
           initialTab="features"
         />
