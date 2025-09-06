@@ -1,4 +1,4 @@
-// app/page.tsx
+// src/app/page.tsx
 export const dynamic = "force-dynamic";
 
 import BannerSlider from "../components/BannerSlider";
@@ -9,22 +9,9 @@ import MiniLooksSlider from "../components/MiniLooksSlider";
 import BestSellersSlider from "../components/BestSellersSlider";
 import BannersRow from "../components/BannersRow";
 import NewArrivalsSlider from "../components/NewArrivalsSlider";
-import { fetchHome } from "@/lib/api";
 import type { Slide } from "@/types/home";
 
-// برای ساخت URL مطلق وقتی API تصویر مسیر نسبی می‌دهد
-const API_ORIGIN = (process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || "")
-  .replace(/\/$/, "")
-  .replace(/\/api$/, "");
-
-// اگر مسیر /media/ باشد، همان نسبی بماند تا از پروکسی Next استفاده شود
-const absolutize = (url?: string | null): string => {
-  if (!url) return "";
-  if (url.startsWith("/media/")) return url;
-  if (/^https?:\/\//i.test(url)) return url;
-  return API_ORIGIN ? `${API_ORIGIN}${url.startsWith("/") ? "" : "/"}${url}` : url;
-};
-
+/* ---------------- Types ---------------- */
 type BannerApiItem = {
   id: number | string;
   image?: string;
@@ -33,6 +20,7 @@ type BannerApiItem = {
   alt?: string | null;
   title?: string | null;
 };
+
 type BannersApiResponse =
   | BannerApiItem[]
   | { count: number; next: string | null; previous: string | null; results: BannerApiItem[] };
@@ -46,6 +34,36 @@ type HomeData = {
   banners?: BannersApiResponse;
   newArrivals?: any[];
   heroSlides?: Slide[];
+};
+
+/* -------- فقط از پروکسی Next استفاده کن -------- */
+const API_PREFIX = "/api"; // همهٔ درخواست‌ها از همین مسیر بروند تا با rewrites → INTERNAL_API_URL پروکسی شوند
+
+const MEDIA_ORIGIN = (
+  process.env.NEXT_PUBLIC_MEDIA_BASE_URL ??
+  process.env.NEXT_PUBLIC_API_BASE_URL ??
+  process.env.NEXT_PUBLIC_API_URL ??
+  ""
+).replace(/\/$/, "").replace(/\/api$/, "");
+
+const MEDIA_PREFIX = (process.env.NEXT_PUBLIC_MEDIA_PREFIX ?? "/media/").replace(/\/?$/, "/");
+
+/* -------- HELPERS -------- */
+const toApi = (path: string) => `${API_PREFIX}/${path.replace(/^\/+/, "")}`;
+
+const absolutize = (url?: string | null): string => {
+  if (!url) return "";
+  if (/^https?:\/\//i.test(url)) return url;
+
+  let path = url.startsWith("/") ? url : `/${url}`;
+  if (!path.startsWith(MEDIA_PREFIX)) {
+    if (/^\/?(slides|banners|uploads|media)\//i.test(path)) {
+      if (!/^\/?media\//i.test(path)) path = `${MEDIA_PREFIX}${path.replace(/^\//, "")}`;
+    } else {
+      path = `${MEDIA_PREFIX}${path.replace(/^\//, "")}`;
+    }
+  }
+  return MEDIA_ORIGIN ? `${MEDIA_ORIGIN}${path}` : path; // اگر CDN نداری همون /media/... می‌مونه
 };
 
 function extractBanners(b: BannersApiResponse | undefined): BannerApiItem[] {
@@ -66,65 +84,64 @@ function mapBannersToSlides(banners: BannerApiItem[]): Slide[] {
     .filter((s) => !!s.imageUrl);
 }
 
-export default async function Page() {
-  let data: HomeData;
+/* --------- SSR fetch از طریق /api (پروکسی Next) --------- */
+async function fetchHomeSSR(): Promise<HomeData> {
   try {
-    data = (await fetchHome()) as unknown as HomeData;
-  } catch {
-    data = {
-      stories: [],
-      vip: { endsAt: new Date().toISOString(), products: [], seeAllLink: "/vip" },
-      setsAndPuffer: { items: [] },
-      miniLooks: [],
-      bestSellers: [],
-      banners: [],
-      newArrivals: [],
-      heroSlides: [],
-    };
-  }
+    const res = await fetch(toApi("home/"), { cache: "no-store", next: { revalidate: 0 } });
+    if (res.ok) return (await res.json()) as HomeData;
+  } catch {}
+  return {
+    stories: [],
+    vip: { endsAt: new Date().toISOString(), products: [], seeAllLink: "/vip" },
+    setsAndPuffer: { items: [] },
+    miniLooks: [],
+    bestSellers: [],
+    banners: [],
+    newArrivals: [],
+    heroSlides: [],
+  };
+}
 
-  // بنرها از API هوم
+/* ---------------- Page ---------------- */
+export default async function Page() {
+  // ✅ برگشت به مدل درست: فقط از /api/* بخوان تا اتصال بک‌اند/فرانت از طریق rewrites برقرار باشد
+  const data = await fetchHomeSSR();
+
   const bannersFromHome = Array.isArray(data.heroSlides) ? data.heroSlides : [];
 
-  // بنرهای جداگانه
+  // fallback بنرها
   let bannerItems = extractBanners(data.banners);
   if (!bannerItems.length) {
     try {
-      // استفاده از rewrite داخلی Next: /api/* → بک‌اند
-      const res = await fetch("/api/banners/", { cache: "no-store" });
+      const res = await fetch(toApi("banners/"), { cache: "no-store", next: { revalidate: 0 } });
       if (!res.ok) throw new Error(`Failed to fetch banners: ${res.status}`);
       const json = await res.json();
       bannerItems = Array.isArray(json) ? json : (json.results ?? []);
-    } catch (e) {
-      console.error("fallback banners fetch failed:", e);
+    } catch {
       bannerItems = [];
     }
   }
 
-  // اگر heroSlides خالی بود → از بنرها استفاده کن
   const heroSlides: Slide[] =
     bannersFromHome.length > 0
-      ? bannersFromHome.map((s, i) => ({
+      ? bannersFromHome.map((s: any, i: number) => ({
           ...s,
-          imageUrl: absolutize((s as any).imageUrl ?? (s as any).image ?? ""),
-          link: (s as any).link ?? (s as any).href ?? undefined,
+          imageUrl: absolutize(s.imageUrl ?? s.image ?? ""),
+          link: s.link ?? s.href ?? undefined,
           alt: s.alt ?? s.title ?? `banner ${i + 1}`,
         }))
       : mapBannersToSlides(bannerItems);
 
   return (
     <main className="p-6 space-y-12">
-      {/* مرحله ۰: بنر بالای صفحه */}
       <section className="relative z-20">
         <BannerSlider {...(heroSlides.length ? { slides: heroSlides } : {})} />
       </section>
 
-      {/* مرحله ۱: استوری‌ها */}
       <section aria-label="استوری تن‌خور بچه‌ها">
         <StorySliderWrapper items={(data.stories ?? []).slice(0, 50)} />
       </section>
 
-      {/* مرحله ۲: VIP */}
       <section aria-label="پکیج VIP">
         <VIPDealsSlider
           endsAt={data.vip?.endsAt ?? new Date().toISOString()}
@@ -133,32 +150,27 @@ export default async function Page() {
         />
       </section>
 
-      {/* مرحله ۳: ست‌ها و پافر */}
       <section aria-label="ست‌ها و پافر">
         <CardSlider
           title="ست‌ها و پافر"
           items={(data.setsAndPuffer?.items ?? []).slice(0, 20)}
-          ctaHref="/products?tab=sets"   // ← اینجا اصلاح شد
+          ctaHref="/products?tab=sets"
           ctaText="مشاهده همه"
         />
       </section>
 
-      {/* مرحله ۴: تن‌خور کوچک */}
       <section aria-label="تن‌خور کوچک بچه‌ها">
         <MiniLooksSlider items={(data.miniLooks ?? []).slice(0, 10)} />
       </section>
 
-      {/* مرحله ۵: پرفروش‌ترین‌ها */}
       <section aria-label="پرفروش‌ترین‌ها">
         <BestSellersSlider products={data.bestSellers ?? []} />
       </section>
 
-      {/* مرحله ۶: بنرهای حراج */}
       <section aria-label="بنرهای حراج">
         <BannersRow banners={bannerItems as any} />
       </section>
 
-      {/* مرحله ۷: جدیدترین‌ها */}
       <section aria-label="جدیدترین‌ها">
         <NewArrivalsSlider products={(data.newArrivals ?? []).slice(0, 8)} />
       </section>

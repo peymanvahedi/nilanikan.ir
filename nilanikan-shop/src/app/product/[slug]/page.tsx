@@ -36,14 +36,47 @@ type Product = {
   [k: string]: any;
 };
 
-const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// ---- API + Media bases (کلاینت) ----
+const API_PREFIX = "/api";
+const MEDIA_ORIGIN =
+  (process.env.NEXT_PUBLIC_MEDIA_BASE_URL ??
+    process.env.NEXT_PUBLIC_API_BASE_URL ??
+    process.env.NEXT_PUBLIC_API_URL ??
+    "") // اگر ست نشده باشد، مسیر نسبی برمی‌گردانیم
+    .replace(/\/$/, "")
+    .replace(/\/api$/, "");
+
+const MEDIA_PREFIX = (process.env.NEXT_PUBLIC_MEDIA_PREFIX ?? "/media/").replace(/\/?$/, "/");
 
 // ---- Utils ----
-function resolveImage(src?: string | null, seed?: string) {
-  if (!src) {
-    return `https://picsum.photos/seed/${encodeURIComponent(seed || "prod")}/1200/1200`;
+function toApi(path: string) {
+  if (/^https?:\/\//i.test(path)) return path;
+  const p = path.replace(/^\/+/, "");
+  // اطمینان از فراخوانی از طریق /api تا CORS و دامنه حل شود
+  return `${API_PREFIX}/${p}`;
+}
+
+function absolutizeImagePath(raw?: string | null) {
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw)) return raw;
+
+  let path = raw.startsWith("/") ? raw : `/${raw}`;
+
+  if (!path.startsWith(MEDIA_PREFIX)) {
+    if (/^\/?(slides|banners|uploads|media)\//i.test(path)) {
+      if (!/^\/?media\//i.test(path)) path = `${MEDIA_PREFIX}${path.replace(/^\//, "")}`;
+    } else {
+      path = `${MEDIA_PREFIX}${path.replace(/^\//, "")}`;
+    }
   }
-  return src?.startsWith("http") ? src : `${BASE}${src}`;
+
+  return MEDIA_ORIGIN ? `${MEDIA_ORIGIN}${path}` : path;
+}
+
+function resolveImage(src?: string | null, seed?: string) {
+  const absolute = absolutizeImagePath(src || undefined);
+  if (absolute) return absolute;
+  return `https://picsum.photos/seed/${encodeURIComponent(seed || "prod")}/1200/1200`;
 }
 function toFa(n: number) {
   return n.toLocaleString("fa-IR");
@@ -218,13 +251,14 @@ export default function ProductPage() {
   const [related, setRelated] = useState<Product[]>([]);
   const [relatedLoading, setRelatedLoading] = useState(false);
 
-  // fetch product
+  // fetch product (از طریق /api تا خطای CORS/host نداشته باشیم)
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
         setLoading(true);
-        const data = await get(`${endpoints.products}${slug}/`, { cache: "no-store" } as any);
+        const url = toApi(`${endpoints.products}${slug}/`);
+        const data = await get(url, { cache: "no-store" } as any);
         if (!alive) return;
         setProduct(data as Product);
       } catch (e: any) {
@@ -261,7 +295,7 @@ export default function ProductPage() {
         else if (product.brand) url += `&brand=${encodeURIComponent(product.brand)}`;
         if (product.id != null) url += `&exclude=${product.id}`;
 
-        const list = await get(url, { cache: "no-store" } as any);
+        const list = await get(toApi(url), { cache: "no-store" } as any);
         if (!alive) return;
 
         const items: Product[] = Array.isArray(list?.results)
@@ -279,7 +313,16 @@ export default function ProductPage() {
     return () => {
       alive = false;
     };
-  }, [product?.id, product?.slug, product?.brand, product?.category, product?.category_slug, product?.categorySlug, product?.category_name, product?.categoryName]);
+  }, [
+    product?.id,
+    product?.slug,
+    product?.brand,
+    product?.category,
+    product?.category_slug,
+    product?.categorySlug,
+    product?.category_name,
+    product?.categoryName,
+  ]);
 
   const attrs = product?.attributes ?? {};
   const featureList = useMemo<string[]>(() => {
@@ -327,7 +370,8 @@ export default function ProductPage() {
   ];
   const images: string[] = galleryRaw.map((g, i) => resolveImage(g, product.slug + "_" + i));
 
-  const hasDiscount = !!product.discount_price && Number(product.discount_price) < Number(product.price);
+  const hasDiscount =
+    !!product.discount_price && Number(product.discount_price) < Number(product.price);
   const discount =
     hasDiscount && product.discount_price
       ? Math.round((1 - Number(product.discount_price) / Number(product.price)) * 100)
@@ -380,10 +424,13 @@ export default function ProductPage() {
                     {toFa(discount)}٪
                   </span>
                 )}
-                {hasDiscount && <del className="text-sm text-zinc-400">{toFa(Number(product.price))}</del>}
+                {hasDiscount && (
+                  <del className="text-sm text-zinc-400">{toFa(Number(product.price))}</del>
+                )}
               </div>
               <div className="text-2xl font-extrabold text-pink-600">
-                {toFa(Number(product.discount_price ?? product.price))} <span className="text-sm">تومان</span>
+                {toFa(Number(product.discount_price ?? product.price))}{" "}
+                <span className="text-sm">تومان</span>
               </div>
             </div>
             <div className="mt-4">

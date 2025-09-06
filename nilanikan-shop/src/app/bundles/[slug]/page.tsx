@@ -1,620 +1,487 @@
-// src/app/bundles/[slug]/page.tsx
+// src/app/bundle/[slug]/page.tsx
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import AddToCartButton from "@/components/AddToCartButton";
 import { get, endpoints } from "@/lib/api";
-import { addManyToCart } from "@/lib/cart";
+import ProductTabs from "@/components/ProductTabs";
 
-/* ---------- helpers ---------- */
-const API_BASE: string =
-  process.env.NEXT_PUBLIC_API_URL ||
-  (typeof window !== "undefined" && (window as any).__NEXT_PUBLIC_API_URL__) ||
-  "http://localhost:8000";
-
-// Placeholder بدون نیاز به فایل public
-const FALLBACK_IMG: string =
-  "data:image/svg+xml;utf8," +
-  encodeURIComponent(
-    `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'>
-      <rect width='100%' height='100%' fill='#f1f5f9'/>
-      <text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle'
-            font-family='sans-serif' font-size='14' fill='#94a3b8'>No Image</text>
-    </svg>`
-  );
-
-/** Normalize image URL (خروجی همیشه string | null است) */
-const toAbs = (u?: string | null): string | null => {
-  if (!u) return null;
-  const s = String(u).trim();
-
-  // اگر URL مطلق است و داخلش /media/... دارد → به مسیر نسبی تبدیل کن
-  const m = s.match(/^https?:\/\/[^/]+(\/media\/.+)$/i);
-  if (m?.[1]) return m[1];
-
-  // خودِ مسیر مدیا و نسبی
-  if (s.startsWith("/media/")) return s;
-
-  // مطلق یا data:
-  if (/^https?:|^data:/i.test(s)) return s;
-
-  // سایر نسبی‌ها را مطلق کن
-  return `${API_BASE}${s.startsWith("/") ? s : `/${s}`}`;
+/* ---------- Types ---------- */
+type SizeChart = {
+  headers: string[];
+  rows: Array<Array<string | number>>;
+  note?: string;
 };
 
-function toNumberSafe(v: unknown): number {
-  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
-  if (typeof v === "string") {
-    const num = Number(v.replace?.(/[,٬\s]/g, ""));
-    return Number.isFinite(num) ? num : 0;
-  }
-  return 0;
-}
-
-/* ---------- انتخاب امن تصویر (با جست‌وجوی بازگشتی) ---------- */
-function pickImage(node: any): string | null {
-  const KEYS = [
-    "image","thumbnail","photo","picture","cover_image","cover",
-    "image_url","main_image","src","url","file","path"
-  ];
-  const ARR_KEYS = ["images","photos","gallery","thumbnails","media"];
-
-  const readDirect = (obj: any): string | null => {
-    if (!obj) return null;
-    for (const k of KEYS) {
-      const v = obj?.[k];
-      if (typeof v === "string" && v.trim()) return v;
-    }
-    for (const k of ARR_KEYS) {
-      const arr = obj?.[k];
-      if (Array.isArray(arr)) {
-        for (const it of arr) {
-          if (typeof it === "string" && it.trim()) return it;
-          if (typeof it === "object" && it) {
-            for (const kk of KEYS) {
-              const v = it?.[kk];
-              if (typeof v === "string" && v.trim()) return v;
-            }
-          }
-        }
-      }
-    }
-    return null;
-  };
-
-  // 🔎 جست‌وجوی بازگشتی: هر رشته‌ای که بوی عکس بده (media/ یا پسوند تصویری)
-  const findMediaUrl = (obj: any, depth = 0): string | null => {
-    if (!obj || depth > 3) return null;
-    if (typeof obj === "string") {
-      const s = obj.trim();
-      if (!s) return null;
-      if (s.includes("/media/") || /\.(jpe?g|png|webp|gif|svg)(\?|#|$)/i.test(s)) return s;
-      return null;
-    }
-    if (Array.isArray(obj)) {
-      for (const it of obj) {
-        const r = findMediaUrl(it, depth + 1);
-        if (r) return r;
-      }
-      return null;
-    }
-    if (typeof obj === "object") {
-      for (const val of Object.values(obj)) {
-        const r = findMediaUrl(val, depth + 1);
-        if (r) return r;
-      }
-    }
-    return null;
-  };
-
-  // از سطح آیتم و محصول بخوان
-  const direct =
-    readDirect(node) ??
-    readDirect(node?.product) ??
-    null;
-
-  const fallback =
-    direct ??
-    findMediaUrl(node) ??
-    findMediaUrl(node?.product) ??
-    null;
-
-  return fallback ? (toAbs(fallback) ?? null) : null;
-}
-
-
-type BundleProduct = {
+type Product = {
   id: number;
-  slug?: string | null;
+  slug: string;
   name: string;
-  image: string | null;
   price: number;
+  discount_price?: number | null;
+  brand?: string | null;
+  description?: string | null;
+  image?: string | null;
+  images?: string[];
+  gallery?: { id: number; image: string; alt?: string | null }[];
+  attributes?: Record<string, string | string[] | number | boolean>;
+  size_chart?: SizeChart | null;
+  category?: string | number | null;
+  category_slug?: string | null;
+  categorySlug?: string | null;
+  category_name?: string | null;
+  categoryName?: string | null;
+  [k: string]: any;
 };
+
+type BundleItem = {
+  product: Product;
+  quantity?: number;
+};
+
 type Bundle = {
   id: number;
-  slug?: string | null;
-  title: string;
-  image: string | null;
-  price: number;
-  items: BundleProduct[];
+  slug: string;
+  name: string;
+  description?: string | null;
+  price: number;                // قیمت نهایی باندل
+  compare_at_price?: number | null; // جمع تکی‌ها یا قیمت بدون تخفیف
+  discount_price?: number | null;   // اگر API به همین شکل می‌دهد
+  image?: string | null;
+  images?: string[];
+  gallery?: { id: number; image: string; alt?: string | null }[];
+  items?: BundleItem[];
+  attributes?: Record<string, string | string[] | number | boolean>;
+  size_chart?: SizeChart | null; // اگر برای باندل معنی دارد
+  brand?: string | null;
+  category?: string | number | null;
+  category_slug?: string | null;
+  [k: string]: any;
 };
 
-function normalizeProduct(p: any): BundleProduct {
-  const base = p ?? {};
-  const prod = p?.product ?? {};
+/* ---------- API + Media bases (کلاینت) ---------- */
+const API_PREFIX = "/api";
+const MEDIA_ORIGIN = (process.env.NEXT_PUBLIC_MEDIA_BASE_URL ??
+  process.env.NEXT_PUBLIC_API_BASE_URL ??
+  process.env.NEXT_PUBLIC_API_URL ??
+  "")
+  .replace(/\/$/, "")
+  .replace(/\/api$/, "");
 
-  // مرجِ امن: اول فیلدهای آیتم، بعد محصول (در جاهایی که آیتم خالیه)
-  const node = { ...base, ...prod };
+const MEDIA_PREFIX = (process.env.NEXT_PUBLIC_MEDIA_PREFIX ?? "/media/").replace(/\/?$/, "/");
 
-  const id =
-    Number(base?.id ?? base?.product_id ?? prod?.id ?? base?.pk ?? prod?.pk ?? 0) || 0;
-
-  const slug = base?.slug ?? prod?.slug ?? null;
-
-  const name =
-    base?.name ?? base?.title ?? prod?.name ?? prod?.title ?? (id ? `محصول ${id}` : "محصول");
-
-  const price = toNumberSafe(
-    base?.final_price ??
-      base?.discount_price ??
-      base?.selling_price ??
-      base?.unit_price ??
-      base?.price ??
-      prod?.final_price ??
-      prod?.discount_price ??
-      prod?.selling_price ??
-      prod?.unit_price ??
-      prod?.price ??
-      0
-  );
-
-  const image = pickImage(node);
-
-  return { id, slug, name: String(name), image, price };
+/* ---------- Utils ---------- */
+function toApi(path: string) {
+  if (/^https?:\/\//i.test(path)) return path;
+  const p = path.replace(/^\/+/, "");
+  return `${API_PREFIX}/${p}`;
 }
 
-function normalizeBundle(b: any): Bundle {
-  const itemsRaw: any[] =
-    (Array.isArray(b?.items) && b.items) ||
-    (Array.isArray(b?.products) && b.products) ||
-    (Array.isArray(b?.bundle_items) && b.bundle_items) ||
-    (Array.isArray(b?.items_list) && b.items_list) ||
-    [];
-  const items = itemsRaw.map(normalizeProduct).filter((x) => x.id);
+function absolutizeImagePath(raw?: string | null) {
+  if (!raw) return "";
+  if (/^https?:\/\//i.test(raw)) return raw;
 
-  const id = Number(b?.id ?? b?.pk ?? 0) || 0;
-  const slug = b?.slug ?? null;
-  const title = String(b?.title ?? b?.name ?? (id ? `باندل ${id}` : "باندل"));
-  const bundleImage =
-    toAbs(b?.image ?? b?.thumbnail ?? b?.images?.[0]) || items[0]?.image || null;
+  let path = raw.startsWith("/") ? raw : `/${raw}`;
 
-  const rawPrice = toNumberSafe(
-    b?.final_price ?? b?.discount_price ?? b?.selling_price ?? b?.price ?? 0
+  if (!path.startsWith(MEDIA_PREFIX)) {
+    if (/^\/?(slides|banners|uploads|media)\//i.test(path)) {
+      if (!/^\/?media\//i.test(path)) path = `${MEDIA_PREFIX}${path.replace(/^\//, "")}`;
+    } else {
+      path = `${MEDIA_PREFIX}${path.replace(/^\//, "")}`;
+    }
+  }
+
+  return MEDIA_ORIGIN ? `${MEDIA_ORIGIN}${path}` : path;
+}
+
+function resolveImage(src?: string | null, seed?: string) {
+  const absolute = absolutizeImagePath(src || undefined);
+  if (absolute) return absolute;
+  return `https://picsum.photos/seed/${encodeURIComponent(seed || "bundle")}/1200/1200`;
+}
+function toFa(n: number) {
+  return n.toLocaleString("fa-IR");
+}
+function escapeHtml(s: string) {
+  return s.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+function toDescriptionHtml(desc?: string | null): string {
+  if (!desc) return "";
+  const parts = desc.split(/\n{2,}/g).map((p) => p.trim()).filter(Boolean);
+  if (parts.length === 0) return "";
+  return parts.map((p) => `<p>${escapeHtml(p)}</p>`).join("");
+}
+
+/* ---------- Gallery (Mobile / Desktop) ---------- */
+function MobileGallery({ images, alt }: { images: string[]; alt: string }) {
+  return (
+    <div className="lg:hidden">
+      <div className="flex overflow-x-auto snap-x snap-mandatory scroll-smooth gap-2 [&::-webkit-scrollbar]:hidden">
+        {images.map((src, i) => (
+          <div
+            key={i}
+            className="relative flex-shrink-0 snap-center w-[80%] sm:w-[45%] aspect-[4/5] rounded-xl ring-1 ring-zinc-200 overflow-hidden"
+          >
+            <Image src={src || "/placeholder.png"} alt={alt} fill className="object-cover" sizes="80vw" />
+          </div>
+        ))}
+      </div>
+    </div>
   );
-  const price = rawPrice > 0 ? rawPrice : items.reduce((s, i) => s + (i.price || 0), 0);
+}
+function DesktopGallery({
+  images,
+  alt,
+  active,
+  setActive,
+}: {
+  images: string[];
+  alt: string;
+  active: number;
+  setActive: (i: number) => void;
+}) {
+  const main = images[active] || images[0] || "/placeholder.png";
+  return (
+    <div className="hidden lg:grid grid-cols-[80px_1fr] gap-4">
+      <div className="flex flex-col gap-2 overflow-y-auto max-h-[520px] pr-1">
+        {images.map((src, i) => (
+          <button
+            key={i}
+            onClick={() => setActive(i)}
+            className={`relative h-20 w-16 rounded-lg overflow-hidden ring-1 ${
+              active === i ? "ring-2 ring-pink-600" : "ring-zinc-200"
+            }`}
+            aria-label={`تصویر ${i + 1}`}
+          >
+            <Image src={src || "/placeholder.png"} alt={alt} fill className="object-cover" sizes="64px" />
+          </button>
+        ))}
+      </div>
+      <div className="relative aspect-[4/5] w-full rounded-2xl ring-1 ring-zinc-200 overflow-hidden">
+        <Image src={main || "/placeholder.png"} alt={alt} fill className="object-cover" sizes="420px" priority />
+      </div>
+    </div>
+  );
+}
 
-  return { id, slug, title, image: bundleImage, price, items };
+/* ---------- Related bundles (horizontal) ---------- */
+function RelatedBundles({ items }: { items: Bundle[] }) {
+  if (!items?.length) return null;
+  return (
+    <div className="relative">
+      <div className="mt-4 flex overflow-x-auto gap-3 snap-x snap-mandatory scroll-smooth [&::-webkit-scrollbar]:hidden">
+        {items.map((b) => {
+          const img =
+            (Array.isArray(b.images) && b.images[0]) ||
+            (Array.isArray(b.gallery) && (b.gallery as any[])[0]?.image) ||
+            b.image ||
+            "/placeholder.png";
+          const src = resolveImage(img, b.slug || String(b.id));
+
+          const base = Number(b.compare_at_price ?? 0) || 0;
+          const final = Number(b.discount_price ?? b.price);
+          const hasOff = base > 0 && final < base;
+          const off = hasOff ? Math.round((1 - final / base) * 100) : 0;
+
+          return (
+            <Link
+              key={b.slug ?? b.id}
+              href={`/bundle/${b.slug ?? b.id}`}
+              className="snap-center relative flex-shrink-0 w-[68%] sm:w-[40%] lg:w-[22%] rounded-2xl border border-zinc-200 bg-white p-3 hover:shadow-sm transition"
+            >
+              <div className="relative aspect-[4/5] w-full overflow-hidden rounded-xl ring-1 ring-zinc-100">
+                <Image src={src || "/placeholder.png"} alt={b.name} fill className="object-cover" sizes="(min-width:1024px) 240px, 70vw" />
+              </div>
+              <div className="mt-3 space-y-1">
+                <h3 className="line-clamp-2 text-sm font-semibold text-zinc-900">{b.name}</h3>
+                <div className="flex items-end gap-2">
+                  {hasOff && (
+                    <span className="rounded bg-rose-600 px-1.5 py-0.5 text-[10px] font-extrabold text-white">
+                      {toFa(off)}٪
+                    </span>
+                  )}
+                  {hasOff && <del className="text-xs text-zinc-400">{toFa(base)}</del>}
+                </div>
+                <div className="text-pink-600 font-extrabold">
+                  {toFa(final)}
+                  <span className="text-[11px] mr-1">تومان</span>
+                </div>
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 /* ---------- Page ---------- */
 export default function BundlePage() {
-  const { slug } = useParams<{ slug: string }>();
+  const params = useParams<{ slug: string }>();
+  const slug = params?.slug ?? "";
 
   const [bundle, setBundle] = useState<Bundle | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const [active, setActive] = useState(0);
 
-  // انتخاب‌ها
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-
-  // گالری
-  const [activeImage, setActiveImage] = useState<string | null>(null);
-
-  // مشابه
   const [related, setRelated] = useState<Bundle[]>([]);
-  const sliderRef = useRef<HTMLDivElement | null>(null);
+  const [relatedLoading, setRelatedLoading] = useState(false);
 
-  // فرمت قیمت
-  const nf = useMemo(() => new Intl.NumberFormat("fa-IR"), []);
-  const fmt = (n: number) => nf.format(Math.round(n));
+  // endpoints.bundles باید در src/lib/api تعریف شده باشد.
+  // اگر نیست، این fallback کار می‌کند.
+  const bundlesEndpoint = (endpoints as any)?.bundles ?? "bundles/";
 
-  const selectedItems = useMemo(
-    () => (bundle ? bundle.items.filter((i) => selectedIds.has(i.id)) : []),
-    [bundle, selectedIds]
-  );
-  const displayPrice = useMemo(() => {
-    if (!bundle) return 0;
-    if (selectedIds.size === 0) return bundle.price;
-    return selectedItems.reduce((s, i) => s + (i.price || 0), 0);
-  }, [bundle, selectedItems, selectedIds]);
-
-  const mainImage = useMemo(() => {
-    if (activeImage) return activeImage;
-    if (selectedItems.length === 1) return selectedItems[0]?.image ?? bundle?.image ?? FALLBACK_IMG;
-    return bundle?.image ?? FALLBACK_IMG;
-  }, [activeImage, selectedItems, bundle]);
-
-  const galleryThumbs = useMemo(() => {
-    const s = new Set<string>();
-    if (bundle?.image) s.add(bundle.image);
-    for (const it of bundle?.items ?? []) {
-      if (it.image) s.add(it.image);
-      if (s.size >= 8) break;
-    }
-    const arr = Array.from(s);
-    if (!arr.length) arr.push(FALLBACK_IMG);
-    return arr;
-  }, [bundle]);
-
-  // لود باندل
+  // fetch bundle
   useEffect(() => {
-    let aborted = false;
+    let alive = true;
     (async () => {
       try {
         setLoading(true);
-        setErr(null);
-
-        let data: any = null;
-        try {
-          data = await get(`${endpoints.bundles}${encodeURIComponent(slug)}/`, {
-            cache: "no-store",
-          } as any);
-        } catch {}
-        if (!data) {
-          const list = await get(
-            `${endpoints.bundles}?search=${encodeURIComponent(slug)}`,
-            { cache: "no-store" } as any
-          );
-          data = Array.isArray(list?.results)
-            ? list.results[0]
-            : Array.isArray(list)
-            ? list[0]
-            : list;
-        }
-        if (!data) throw new Error("باندل پیدا نشد");
-
-        if (!aborted) {
-          const normalized = normalizeBundle(data);
-          setBundle(normalized);
-          setSelectedIds(new Set());
-          setActiveImage(null);
-        }
+        const url = toApi(`${bundlesEndpoint}${slug}/`);
+        const data = await get(url, { cache: "no-store" } as any);
+        if (!alive) return;
+        setBundle(data as Bundle);
       } catch (e: any) {
-        if (!aborted) setErr(e?.message || "خطا در دریافت اطلاعات باندل");
+        if (!alive) return;
+        setErr(e?.message || "خطا در دریافت اطلاعات باندل");
       } finally {
-        if (!aborted) setLoading(false);
+        if (alive) setLoading(false);
       }
     })();
-
     return () => {
-      aborted = true;
+      alive = false;
     };
-  }, [slug]);
+  }, [slug, bundlesEndpoint]);
 
-  // مشابه (فقط عنوان شامل «ست»)
+  // fetch related bundles (by category or tag if available)
   useEffect(() => {
-    if (!bundle) return;
-    const hasSet = (s?: string | null) => typeof s === "string" && s.includes("ست");
+    let alive = true;
     (async () => {
+      if (!bundle) return;
+      setRelatedLoading(true);
       try {
-        const res = await get(`${endpoints.bundles}?search=${encodeURIComponent("ست")}&limit=30`, {
-          cache: "no-store",
-        } as any);
-        const rows: any[] = Array.isArray(res?.results) ? res.results : Array.isArray(res) ? res : [];
-        const list = rows
-          .map(normalizeBundle)
-          .filter((b) => b.id && hasSet(b.title) && b.id !== bundle.id)
-          .slice(0, 20);
-        setRelated(list);
+        let url = `${bundlesEndpoint}?limit=16`;
+        const cat =
+          bundle.category_slug ??
+          (typeof bundle.category === "string" ? bundle.category : undefined);
+        if (cat) url += `&category=${encodeURIComponent(cat)}`;
+        if (bundle.id != null) url += `&exclude=${bundle.id}`;
+        const list = await get(toApi(url), { cache: "no-store" } as any);
+        if (!alive) return;
+
+        const items: Bundle[] = Array.isArray(list?.results)
+          ? list.results
+          : Array.isArray(list)
+          ? list
+          : [];
+        setRelated(items.filter((b) => (b.slug ?? b.id) !== (bundle.slug ?? bundle.id)));
       } catch {
         setRelated([]);
+      } finally {
+        if (alive) setRelatedLoading(false);
       }
     })();
-  }, [bundle]);
+    return () => {
+      alive = false;
+    };
+  }, [bundle?.id, bundle?.slug, bundle?.category, bundle?.category_slug, bundlesEndpoint]);
 
-  // selection handlers
-  const toggleSelect = (id: number) =>
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  const selectAll = () => bundle && setSelectedIds(new Set(bundle.items.map((i) => i.id)));
-  const clearSelection = () => setSelectedIds(new Set());
+  const descriptionHtml = useMemo(() => {
+    const raw = bundle?.description ?? "";
+    const looksLikeHtml = /<\w+[^>]*>/.test(raw);
+    return looksLikeHtml ? raw : toDescriptionHtml(raw);
+  }, [bundle?.description]);
 
-  // cart
-  const addSelectedToCart = async () => {
-    const items = selectedItems.length ? selectedItems : bundle?.items || [];
-    if (items.length === 0) return;
-    await addManyToCart(
-      items.map((it) => ({
-        id: it.id,
-        name: it.name,
-        price: it.price,
-        image: it.image ?? null,
-      })),
-      1
-    );
-    alert(
-      selectedItems.length
-        ? `${selectedItems.length} آیتم انتخابی به سبد اضافه شد.`
-        : "تمام آیتم‌های باندل به سبد اضافه شد."
-    );
-  };
-
-  /* ---------------- UI ---------------- */
   if (loading) {
     return (
-      <div className="mx-auto max-w-7xl p-6" dir="rtl">
-        <div className="h-8 w-36 rounded-full bg-slate-200 animate-pulse mb-4" />
-        <div className="grid grid-cols-12 gap-6">
-          <div className="col-span-12 lg:col-span-5">
-            <div className="aspect-square sm:aspect-[4/3] rounded-3xl bg-slate-200 animate-pulse" />
-            <div className="mt-3 grid grid-cols-6 gap-2">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="h-16 rounded-xl bg-slate-200 animate-pulse" />
-              ))}
-            </div>
-          </div>
-          <div className="col-span-12 lg:col-span-7 space-y-3">
-            <div className="h-10 rounded-xl bg-slate-200 animate-pulse" />
-            <div className="h-28 rounded-2xl bg-slate-200 animate-pulse" />
-            <div className="h-60 rounded-2xl bg-slate-200 animate-pulse" />
-          </div>
-        </div>
-      </div>
+      <main className="mx-auto max-w-7xl px-4 py-8" dir="rtl">
+        در حال بارگذاری…
+      </main>
     );
   }
-  if (err) return <div className="p-6 text-red-600" dir="rtl">{err}</div>;
-  if (!bundle) return <div className="p-6" dir="rtl">چیزی پیدا نشد.</div>;
+  if (err || !bundle) {
+    return (
+      <main className="mx-auto max-w-7xl px-4 py-8" dir="rtl">
+        خطا: {err || "باندل پیدا نشد."}
+      </main>
+    );
+  }
 
-  const hero = mainImage || FALLBACK_IMG;
+  // gallery list
+  const galleryRaw: string[] = [
+    ...(Array.isArray(bundle.images) ? bundle.images : []),
+    ...(Array.isArray(bundle.gallery) ? bundle.gallery.map((g) => g.image) : []),
+    ...(bundle.image ? [bundle.image] : []),
+  ];
+  const images: string[] = galleryRaw.map((g, i) => resolveImage(g, bundle.slug + "_" + i));
+
+  const basePrice = Number(bundle.compare_at_price ?? 0) || 0;
+  const finalPrice = Number(bundle.discount_price ?? bundle.price);
+  const hasDiscount = basePrice > 0 && finalPrice < basePrice;
+  const discount = hasDiscount ? Math.round((1 - finalPrice / basePrice) * 100) : 0;
+
+  // محاسبه جمع آیتم‌ها (اگر API compare_at_price ندهد)
+  const itemsTotal = useMemo(() => {
+    const arr = bundle.items ?? [];
+    return arr.reduce((sum, it) => {
+      const p = Number(it.product?.discount_price ?? it.product?.price ?? 0);
+      const q = Number(it.quantity ?? 1);
+      return sum + p * q;
+    }, 0);
+  }, [bundle.items]);
+
+  const features = useMemo<string[]>(() => {
+    const out: string[] = [];
+    if (Array.isArray(bundle.items)) {
+      out.push(`تعداد آیتم‌ها: ${bundle.items.length}`);
+    }
+    if (hasDiscount) out.push(`صرفه‌جویی: ${toFa(basePrice - finalPrice)} تومان (${toFa(discount)}٪)`);
+    return out;
+  }, [bundle.items, hasDiscount, basePrice, finalPrice, discount]);
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6" dir="rtl">
-      {/* Breadcrumb */}
-      <nav className="mb-3 text-sm text-slate-500">
-        <a href="/" className="hover:text-slate-700">خانه</a>
-        <span className="mx-1.5">/</span>
-        <a href="/bundles" className="hover:text-slate-700">باندل‌ها</a>
-        <span className="mx-1.5">/</span>
-        <span className="text-slate-800">{bundle.title}</span>
+    <main className="mx-auto max-w-7xl px-4 py-8" dir="rtl">
+      {/* breadcrumbs */}
+      <nav className="mb-4 flex flex-wrap items-center gap-2 text-sm text-zinc-500">
+        <span>باندل‌ها</span> <span>›</span>
+        <span className="font-medium text-zinc-700">{bundle.name}</span>
       </nav>
 
-      {/* Header */}
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900">{bundle.title}</h1>
-        <span className="hidden sm:inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-100">
-          پکیج ویژه
-        </span>
-      </div>
-
-      {/* Grid */}
-      <div className="grid grid-cols-12 gap-6">
+      {/* 3 columns */}
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[420px_1fr_360px] lg:items-start">
         {/* Gallery */}
-        <section className="col-span-12 lg:col-span-5">
-          <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-            <div className="relative aspect-square sm:aspect-[4/3]">
-              <Image
-                src={hero}
-                alt={bundle.title}
-                fill
-                sizes="(max-width: 1024px) 100vw, 42vw"
-                priority
-                className="object-contain transition duration-300 hover:scale-[1.02] bg-white"
-                unoptimized
-              />
-              <div className="pointer-events-none absolute inset-x-0 top-0 h-10 bg-gradient-to-b from-white/70 to-transparent" />
-            </div>
-          </div>
-
-          {/* Thumbs */}
-          <div className="mt-3 no-scrollbar flex gap-2 overflow-x-auto">
-            {galleryThumbs.map((src, idx) => {
-              const active = hero === src;
-              return (
-                <button
-                  key={idx}
-                  onClick={() => setActiveImage(src)}
-                  className={[
-                    "relative h-20 w-20 shrink-0 overflow-hidden rounded-xl border transition",
-                    active ? "border-emerald-500 ring-2 ring-emerald-500/40" : "border-slate-200 hover:shadow-sm",
-                  ].join(" ")}
-                  aria-label={`تصویر ${idx + 1}`}
-                >
-                  <Image
-                    src={src || FALLBACK_IMG}
-                    alt={`thumb-${idx}`}
-                    fill
-                    sizes="80px"
-                    className="object-contain bg-white"
-                    unoptimized
-                  />
-                </button>
-              );
-            })}
-          </div>
+        <section className="lg:col-start-1 lg:col-end-2">
+          <MobileGallery images={images} alt={bundle.name} />
+          <DesktopGallery images={images} alt={bundle.name} active={active} setActive={setActive} />
         </section>
 
-        {/* Summary & CTA */}
-        <section className="col-span-12 lg:col-span-7 space-y-5">
-          <div className="rounded-3xl border border-slate-200 bg-white/90 p-5 sm:p-6 shadow-[0_10px_30px_-12px_rgba(0,0,0,0.15)]">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <div className="text-xs text-slate-500">
-                  {selectedIds.size ? "مجموع آیتم‌های انتخاب‌شده" : "قیمت باندل"}
+        {/* Details */}
+        <section className="lg:col-start-2 lg:col-end-3">
+          <h1 className="text-lg md:text-xl lg:text-2xl font-bold text-zinc-900">{bundle.name}</h1>
+          {/* آیتم‌های داخل باندل */}
+          {Array.isArray(bundle.items) && bundle.items.length > 0 && (
+            <div className="mt-6 space-y-3">
+              <h2 className="text-sm font-bold text-zinc-900">محتویات باندل</h2>
+              <ul className="space-y-3">
+                {bundle.items.map((it, i) => {
+                  const p = it.product;
+                  const q = Number(it.quantity ?? 1);
+                  const img =
+                    (Array.isArray(p.images) && p.images[0]) ||
+                    (Array.isArray(p.gallery) && (p.gallery as any[])[0]?.image) ||
+                    p.image ||
+                    "/placeholder.png";
+                  const src = resolveImage(img, p.slug || String(p.id));
+
+                  const priceEach = Number(p.discount_price ?? p.price ?? 0);
+                  return (
+                    <li key={i} className="flex items-center gap-3">
+                      <div className="relative h-16 w-12 overflow-hidden rounded-md ring-1 ring-zinc-200">
+                        <Image src={src} alt={p.name} fill className="object-cover" sizes="48px" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <Link href={`/product/${p.slug ?? p.id}`} className="block truncate text-sm font-semibold hover:underline">
+                          {p.name}
+                        </Link>
+                        <div className="text-xs text-zinc-500 mt-0.5">تعداد: {toFa(q)}</div>
+                      </div>
+                      <div className="text-xs whitespace-nowrap">
+                        {toFa(priceEach)} <span>تومان</span>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+
+              {/* جمع تکی‌ها اگر compare_at_price نداشت */}
+              {(!basePrice && itemsTotal > 0) && (
+                <div className="text-xs text-zinc-500">
+                  جمع قیمت آیتم‌ها (تکی): <span className="font-bold">{toFa(itemsTotal)}</span> تومان
                 </div>
-                <div className="mt-1 inline-flex items-baseline gap-1 rounded-2xl bg-emerald-50 px-4 py-1.5 ring-1 ring-emerald-100">
-                  <span className="text-3xl font-black text-emerald-700 leading-none">
-                    {fmt(displayPrice)}
-                  </span>
-                  <span className="text-[12px] font-semibold text-emerald-700">تومان</span>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={addSelectedToCart}
-                  className="rounded-2xl bg-emerald-600 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-                >
-                  {selectedIds.size ? "افزودن آیتم‌های انتخابی" : "افزودن تمام باندل"}
-                </button>
-                <a
-                  href="#bundle-items"
-                  className="rounded-2xl border border-slate-300 bg-white px-6 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
-                >
-                  مشاهده آیتم‌ها
-                </a>
-              </div>
-            </div>
-
-            <p className="mt-4 text-[13px] leading-6 text-slate-500">
-              از لیست زیر آیتم‌ها را انتخاب/لغو کنید. اگر انتخابی انجام نشود، همهٔ آیتم‌ها افزوده می‌شوند.
-            </p>
-          </div>
-
-          {/* Selectable items */}
-          <div id="bundle-items" className="rounded-3xl border border-slate-200 bg-white p-4 sm:p-5">
-            <div className="mb-3 flex items-center gap-2">
-              <h2 className="text-base sm:text-lg font-semibold text-slate-800">آیتم‌های داخل باندل</h2>
-              <span className="ml-auto text-xs text-slate-500">
-                {selectedIds.size ? `${selectedIds.size} انتخاب` : "بدون انتخاب"}
-              </span>
-              <button onClick={selectAll} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50">
-                انتخاب همه
-              </button>
-              <button onClick={clearSelection} className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50">
-                پاک‌کردن
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
-              {bundle.items.map((it) => {
-                const checked = selectedIds.has(it.id);
-                return (
-                  <label
-                    key={it.id}
-                    className={[
-                      "group relative flex cursor-pointer flex-col rounded-2xl border bg-white p-2 transition",
-                      checked ? "border-emerald-500/70 ring-2 ring-emerald-500/30" : "border-slate-200 hover:shadow-sm",
-                    ].join(" ")}
-                    title={it.name}
-                  >
-                    <input
-                      type="checkbox"
-                      className="peer absolute right-2 top-2 h-4 w-4 cursor-pointer accent-emerald-600"
-                      checked={checked}
-                      onChange={() => toggleSelect(it.id)}
-                    />
-                    <div className="relative aspect-square overflow-hidden rounded-xl bg-slate-50">
-                      <Image
-                        src={it.image || FALLBACK_IMG}
-                        alt={it.name}
-                        fill
-                        sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
-                        className="object-cover transition group-hover:scale-[1.02]"
-                        onMouseEnter={() => setActiveImage(it.image ?? null)}
-                        onMouseLeave={() => setActiveImage(null)}
-                        unoptimized
-                      />
-                    </div>
-                    <div className="mt-2 line-clamp-1 text-[13px] font-medium text-slate-800">{it.name}</div>
-                    <div className="text-[12px] font-semibold text-emerald-600">
-                      {fmt(it.price)} <span className="font-normal">تومان</span>
-                    </div>
-                    <span
-                      className={[
-                        "absolute -top-1 -left-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
-                        checked ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-600",
-                      ].join(" ")}
-                    >
-                      ✓
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Related */}
-          {related.length > 0 && (
-            <div className="mt-6">
-              <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-base sm:text-lg font-semibold text-slate-900">باندل‌های مشابه</h3>
-                <div className="hidden sm:flex gap-2">
-                  <button
-                    onClick={() => sliderRef.current?.scrollBy({ left: -600, behavior: "smooth" })}
-                    className="rounded-full border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
-                  >
-                    ‹
-                  </button>
-                  <button
-                    onClick={() => sliderRef.current?.scrollBy({ left: +600, behavior: "smooth" })}
-                    className="rounded-full border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
-                  >
-                    ›
-                  </button>
-                </div>
-              </div>
-
-              <div
-                ref={sliderRef}
-                className="no-scrollbar flex gap-3 overflow-x-auto scroll-smooth snap-x snap-mandatory pr-1"
-              >
-                {related.map((b) => (
-                  <a
-                    key={`rb-${b.id}-${b.title}`}
-                    href={`/bundles/${b.slug ?? b.id}`}
-                    className="snap-start shrink-0 w-44 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm hover:shadow-md transition"
-                  >
-                    <div className="relative aspect-square overflow-hidden rounded-xl bg-slate-50">
-                      <Image
-                        src={b.image || FALLBACK_IMG}
-                        alt={b.title}
-                        fill
-                        sizes="176px"
-                        className="object-cover"
-                        unoptimized
-                      />
-                    </div>
-                    <div className="mt-2 line-clamp-1 text-sm font-medium text-slate-800">{b.title}</div>
-                    <div className="text-[13px] font-semibold text-emerald-600">
-                      {fmt(b.price)} <span className="font-normal">تومان</span>
-                    </div>
-                  </a>
-                ))}
-              </div>
+              )}
             </div>
           )}
+
+          {/* ویژگی‌ها/هایلایت‌ها */}
+          {features.length > 0 && (
+            <ul className="mt-6 grid grid-cols-1 gap-2 text-sm text-zinc-700 sm:grid-cols-2">
+              {features.slice(0, 6).map((f, i) => (
+                <li key={i}>
+                  <span className="text-emerald-600">•</span> {f}
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
-      </div>
 
-      {/* Sticky bottom bar (mobile) */}
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/70 px-4 py-3 sm:hidden">
-        <div className="mx-auto flex max-w-7xl items-center gap-3">
-          <div className="flex flex-col">
-            <span className="text-[10px] text-slate-500">
-              {selectedIds.size ? "مجموع انتخاب شما" : "قیمت باندل"}
-            </span>
-            <span className="text-base font-extrabold text-emerald-700">
-              {fmt(displayPrice)} <span className="text-xs font-semibold">تومان</span>
-            </span>
+        {/* Buy box */}
+        <aside className="lg:col-start-3 lg:col-end-4">
+          <div className="sticky top-4 rounded-2xl border border-zinc-200 p-4 bg-white">
+            <ul className="mb-4 space-y-3 text-sm text-zinc-700">
+              <li>🛡️ ضمانت اصالت و سلامت کالا</li>
+              <li>🔄 بازگشت ۷ روزه طبق شرایط</li>
+              <li>🚚 ارسال رایگان خریدهای بالای ۲.۵ میلیون</li>
+            </ul>
+            <div className="text-center">
+              <div className="mb-1 flex items-end justify-center gap-3">
+                {hasDiscount && (
+                  <span className="rounded-lg bg-rose-600 px-2 py-0.5 text-xs font-extrabold text-white">
+                    {toFa(discount)}٪
+                  </span>
+                )}
+                {hasDiscount && basePrice > 0 && (
+                  <del className="text-sm text-zinc-400">{toFa(basePrice)}</del>
+                )}
+              </div>
+              <div className="text-2xl font-extrabold text-pink-600">
+                {toFa(finalPrice)} <span className="text-sm">تومان</span>
+              </div>
+            </div>
+            <div className="mt-4">
+              <AddToCartButton
+                id={Number(bundle.id)}
+                price={finalPrice}
+                name={bundle.name}
+                image={images[0] || "/placeholder.png"}
+                className="h-12 w-full rounded-xl bg-pink-600 font-bold text-white hover:bg-pink-700"
+              />
+            </div>
+
+            {/* توضیح کوتاه صرفه‌جویی */}
+            {hasDiscount && basePrice > 0 && (
+              <p className="mt-3 text-center text-xs text-emerald-600">
+                با خرید این باندل {toFa(basePrice - finalPrice)} تومان صرفه‌جویی می‌کنید
+              </p>
+            )}
           </div>
-          <button
-            onClick={addSelectedToCart}
-            className="ml-auto inline-flex items-center justify-center rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
-          >
-            افزودن به سبد
-          </button>
-        </div>
+        </aside>
       </div>
 
-      {/* global */}
-      <style jsx global>{`
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-      `}</style>
-    </div>
+      {/* Tabs */}
+      <section className="mt-12">
+        <ProductTabs
+          features={features}
+          description={descriptionHtml}
+          sizeChart={undefined} // معمولاً برای باندل لازم نیست
+          reviewsEnabled={false}
+          initialTab="features"
+        />
+      </section>
+
+      {/* Related */}
+      {(relatedLoading || related.length > 0) && (
+        <section className="mt-14">
+          <h2 className="mb-4 text-base md:text-lg font-bold text-zinc-900">باندل‌های مشابه</h2>
+
+          {relatedLoading && <p className="text-sm text-zinc-500">در حال بارگذاری…</p>}
+
+          {!relatedLoading && related.length > 0 && <RelatedBundles items={related} />}
+        </section>
+      )}
+    </main>
   );
 }

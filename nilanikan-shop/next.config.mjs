@@ -1,43 +1,50 @@
 // next.config.mjs
-const PUBLIC_BASE =
-  process.env.NEXT_PUBLIC_API_BASE_URL ||
-  process.env.NEXT_PUBLIC_API_URL ||
-  "";
-
-let host = "";
-let protocol = "https";
-let port = "";
-
-if (PUBLIC_BASE) {
-  try {
-    const u = new URL(PUBLIC_BASE);
-    host = u.hostname;
-    protocol = u.protocol.replace(":", "") || "https";
-    port = u.port || "";
-  } catch {}
-}
-
-const API_BASE_INTERNAL = (process.env.INTERNAL_API_URL || "http://localhost:8000/api").replace(/\/$/, "");
-const MEDIA_BASE_INTERNAL = API_BASE_INTERNAL.replace(/\/api$/, "");
-
 /** @type {import('next').NextConfig} */
+
+const INTERNAL_API_URL = (process.env.INTERNAL_API_URL || "http://web:8000/api").replace(/\/$/, "");
+const ORIGIN_FROM_INTERNAL = INTERNAL_API_URL.replace(/\/api$/, "");
+
+// اگر CDN مدیا داری، اینو ست کن. در غیر این صورت خالی بماند.
+const MEDIA_BASE_PUBLIC = (process.env.NEXT_PUBLIC_MEDIA_BASE_URL || "").trim();
+
 const nextConfig = {
+  reactStrictMode: true,
+  trailingSlash: true,
+
   images: {
     remotePatterns: [
-      { protocol: "http",  hostname: "localhost",    pathname: "/**" },
-      { protocol: "http",  hostname: "127.0.0.1",    pathname: "/**" },
+      // توسعه محلی
+      { protocol: "http", hostname: "localhost", pathname: "/**" },
+      { protocol: "http", hostname: "127.0.0.1", pathname: "/**" },
+      // Codespaces
       { protocol: "https", hostname: "**.app.github.dev", pathname: "/**" },
-      { protocol: "https", hostname: "picsum.photos", pathname: "/**" }, // ← اضافه شد
-      ...(host
-        ? [{ protocol, hostname: host, port, pathname: "/**" }]
+      // Placeholder service
+      { protocol: "https", hostname: "picsum.photos", pathname: "/**" },
+      // اگر CDN مدیا ست شده باشد
+      ...(MEDIA_BASE_PUBLIC
+        ? (() => {
+            const u = new URL(MEDIA_BASE_PUBLIC);
+            return [
+              {
+                protocol: u.protocol.replace(":", ""),
+                hostname: u.hostname,
+                port: u.port || "",
+                pathname: "/**",
+              },
+            ];
+          })()
         : []),
     ],
   },
 
   async rewrites() {
     return [
-      { source: "/api/:path*",   destination: `${API_BASE_INTERNAL}/:path*` },
-      { source: "/media/:path*", destination: `${MEDIA_BASE_INTERNAL}/media/:path*` },
+      // پروکسی API (با و بدون اسلش پایانی)
+      { source: "/api/:path*/", destination: `${INTERNAL_API_URL}/:path*/` },
+      { source: "/api/:path*", destination: `${INTERNAL_API_URL}/:path*/` },
+
+      // پروکسی مدیا
+      { source: "/media/:path*", destination: `${ORIGIN_FROM_INTERNAL}/media/:path*` },
     ];
   },
 };

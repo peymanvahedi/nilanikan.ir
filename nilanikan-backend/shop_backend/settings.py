@@ -179,3 +179,6 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 # در Dev روی http هم کار کند
 SESSION_COOKIE_SECURE = False
 CSRF_COOKIE_SECURE = False
+
+
+APPEND_SLASH = False
