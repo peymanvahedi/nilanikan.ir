@@ -10,9 +10,10 @@ type ProductCardProps = {
   name: string;
   price: number;
   image: string;
+  sizeChart?: { size: string; chest: number; waist: number; hip: number; sleeve: number; pantsLength: number }[];  // اضافه کردن سایزبندی
 };
 
-export default function ProductCard({ id, slug, name, price, image }: ProductCardProps) {
+export default function ProductCard({ id, slug, name, price, image, sizeChart }: ProductCardProps) {
   return (
     <Link
       href={`/product/${slug}`}
@@ -32,6 +33,37 @@ export default function ProductCard({ id, slug, name, price, image }: ProductCar
         <span className="text-pink-600 font-extrabold text-base sm:text-sm">
           {priceFormatter.format(price)} تومان
         </span>
+        
+        {/* نمایش جدول سایزبندی */}
+        {sizeChart && sizeChart.length > 0 && (
+          <div className="mt-2 text-xs text-zinc-600">
+            <h4 className="font-semibold">جدول سایزبندی</h4>
+            <table className="w-full mt-1 border-collapse">
+              <thead>
+                <tr>
+                  <th className="border-b py-1 px-2">سایز</th>
+                  <th className="border-b py-1 px-2">دور سینه</th>
+                  <th className="border-b py-1 px-2">دور کمر</th>
+                  <th className="border-b py-1 px-2">دور باسن</th>
+                  <th className="border-b py-1 px-2">قد آستین</th>
+                  <th className="border-b py-1 px-2">قد شلوار</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sizeChart.map((size) => (
+                  <tr key={size.size}>
+                    <td className="border-b py-1 px-2">{size.size}</td>
+                    <td className="border-b py-1 px-2">{size.chest}</td>
+                    <td className="border-b py-1 px-2">{size.waist}</td>
+                    <td className="border-b py-1 px-2">{size.hip}</td>
+                    <td className="border-b py-1 px-2">{size.sleeve}</td>
+                    <td className="border-b py-1 px-2">{size.pantsLength}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </Link>
   );

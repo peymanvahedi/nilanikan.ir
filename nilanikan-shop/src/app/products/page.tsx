@@ -1,200 +1,227 @@
 "use client";
+
 import { useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { FilterPanel } from "@/components/catalog/FilterPanel";
-import { ProductsGrid } from "@/components/catalog/ProductsGrid";
+import { useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { fetchProducts, post, endpoints } from "@/lib/api";
+import type { ProductItem } from "@/types/home";
 
-// ⬇️ مقادیر و توابع
-import { buildQueryFromParams, defaultQueryState } from "../../lib/catalog/query";
-// ⬇️ فقط تایپ
-import type { QueryState } from "../../lib/catalog/query";
+type LoadState = "idle" | "loading" | "done" | "error";
 
-export default function ProductsPage() {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-
-  const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
-
-  const initialState: QueryState = useMemo(
-    () => ({
-      ...defaultQueryState,
-      q: searchParams.get("q") ?? "",
-      category: searchParams.getAll("category"),
-      types: searchParams.getAll("type"),
-      colors: searchParams.getAll("color"),
-      sizes: searchParams.getAll("size"),
-      minPrice: searchParams.get("minPrice")
-        ? Number(searchParams.get("minPrice"))
-        : undefined,
-      maxPrice: searchParams.get("maxPrice")
-        ? Number(searchParams.get("maxPrice"))
-        : undefined,
-      sort: (searchParams.get("sort") as QueryState["sort"]) ?? "latest",
-      page: searchParams.get("page") ? Number(searchParams.get("page")) : 1,
-      perPage: searchParams.get("perPage")
-        ? Number(searchParams.get("perPage"))
-        : 24,
-    }),
-    [searchParams]
-  );
-
-  const [query, setQuery] = useState<QueryState>(initialState);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [data, setData] = useState<{ items: any[]; total: number }>({
-    items: [],
-    total: 0,
-  });
-
-  // debounce برای q
-  const [debouncedQ, setDebouncedQ] = useState(query.q);
-  useEffect(() => {
-    const id = setTimeout(() => setDebouncedQ(query.q), 400);
-    return () => clearTimeout(id);
-  }, [query.q]);
-
-  // Sync URL with state
-  useEffect(() => {
-    const params = buildQueryFromParams({ ...query, q: debouncedQ });
-    const current = searchParams.toString();
-    const next = params.toString();
-    if (current !== next) router.replace(`/products?${next}`);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, debouncedQ, router]);
-
-  // Fetch از بک‌اند
-  useEffect(() => {
-    setLoading(true);
-    setError(null);
-    const controller = new AbortController();
-    const params = buildQueryFromParams({ ...query, q: debouncedQ }).toString();
-
-    // حذف اسلش‌های انتهایی
-    const base = API_BASE ? API_BASE.replace(/\/+$/, "") : "";
-    // ✅ DRF معمولاً اسلش انتهایی دارد
-    const endpoint = base ? `${base}/products/?${params}` : `/api/products?${params}`;
-
-    fetch(endpoint, { signal: controller.signal })
-      .then(async (r) => {
-        // متن پاسخ را برای پیام خطا نگه می‌داریم
-        const text = await r.text().catch(() => "");
-        if (!r.ok) {
-          throw new Error(`HTTP ${r.status} ${r.statusText} | ${text.slice(0, 200)}`);
-        }
-        // اگر OK بود، JSON کن
-        try {
-          return JSON.parse(text || "{}");
-        } catch {
-          throw new Error("Invalid JSON from API");
-        }
-      })
-      .then((json) => {
-        // مبنا برای ساخت URL کامل عکس‌ها (اگر API_BASE = http://127.0.0.1:8000/api → origin = http://127.0.0.1:8000)
-        const SITE_ORIGIN = API_BASE
-          ? API_BASE.replace(/\/+$/, "").replace(/\/api$/, "")
-          : "";
-
-        const abs = (u?: string) => {
-          if (!u) return u;
-          if (/^https?:\/\//i.test(u)) return u;
-          const baseUrl = SITE_ORIGIN || "";
-          const sep = u.startsWith("/") ? "" : "/";
-          return `${baseUrl}${sep}${u}`;
-        };
-
-        // پشتیبانی از 3 مدل پاسخ رایج
-        let raw: any[] = [];
-        let total = 0;
-
-        if (Array.isArray(json)) {
-          raw = json;
-          total = json.length;
-        } else if (json?.results) {
-          raw = json.results;
-          total = json.count ?? json.results.length ?? 0;
-        } else if (json?.items) {
-          raw = json.items;
-          total = json.total ?? json.items.length ?? 0;
-        } else if (json?.data) {
-          const d = json.data;
-          if (Array.isArray(d)) {
-            raw = d;
-            total = d.length;
-          } else if (d?.results) {
-            raw = d.results;
-            total = d.count ?? d.results.length ?? 0;
-          }
-        }
-
-        // نگاشت فیلدها به چیزی که گرید می‌خواند
-        const items = raw.map((p) => {
-          const title = p.title ?? p.name ?? p.sku ?? "بدون‌نام";
-          const image =
-            abs(p.image) ||
-            abs(p.thumbnail) ||
-            abs(p.cover) ||
-            abs(p.primary_image) ||
-            undefined;
-          const price = p.price ?? p.unit_price ?? 0;
-          const id = p.id ?? p.slug ?? title;
-          const created = p.created ?? p.created_at ?? null;
-          return { ...p, id, title, price, image, created };
-        });
-
-        // برای دیباگ سریع اولین آیتم رو تو کنسول ببین
-        if (process.env.NODE_ENV !== "production") {
-          console.log("PRODUCTS_ENDPOINT", endpoint);
-          console.log("FIRST_ITEM_NORMALIZED", items[0]);
-        }
-
-        setData({ items, total });
-      })
-      .catch((e: any) => {
-        if (e?.name !== "AbortError") {
-          console.error("PRODUCTS_FETCH_ERROR", { endpoint, error: e?.message });
-          setError(`خطا: ${e?.message}\nURL: ${endpoint}`);
-        }
-      })
-      .finally(() => setLoading(false));
-
-    return () => controller.abort();
-  }, [API_BASE, query, debouncedQ]);
+function ProductCard({
+  p,
+  onAdd,
+  busy,
+}: {
+  p: ProductItem;
+  onAdd: (p: ProductItem) => void;
+  busy: boolean;
+}) {
+  const hasDiscount =
+    typeof p.compareAtPrice === "number" && p.compareAtPrice > (p.price ?? 0);
+  const percent = hasDiscount
+    ? Math.round(((p.compareAtPrice! - (p.price ?? 0)) / p.compareAtPrice!) * 100)
+    : 0;
 
   return (
-    <div className="mx-auto max-w-7xl px-3 sm:px-6 lg:px-8 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
-      <aside className="lg:col-span-3">
-        <FilterPanel
-          value={{ ...query, q: debouncedQ }}
-          onChange={(v: QueryState) => setQuery(v)}
-        />
-      </aside>
+    <div className="border rounded-xl p-3">
+      <Link href={p.link || "#"} className="block group">
+        <div className="aspect-[3/4] rounded-lg overflow-hidden bg-gray-50">
+          <img
+            src={p.imageUrl}
+            alt={p.title}
+            className="w-full h-full object-cover group-hover:scale-105 transition"
+            loading="lazy"
+          />
+        </div>
+        <div className="mt-2 text-sm line-clamp-2">{p.title}</div>
+      </Link>
 
-      <main className="lg:col-span-9">
-        {error && (
-          <div className="mb-3 whitespace-pre-wrap rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {error}
-          </div>
+      <div className="flex items-center gap-2 mt-2 text-sm">
+        {typeof p.price === "number" && (
+          <span className="font-bold">{p.price.toLocaleString()} تومان</span>
         )}
-        <ProductsGrid
-          loading={loading}
-          items={data.items}
-          total={data.total}
-          page={query.page}
-          perPage={query.perPage}
-          onPageChange={(p: number) => {
-            window.scrollTo({ top: 0, behavior: "smooth" });
-            setQuery((q: QueryState) => ({ ...q, page: p }));
-          }}
-          sort={query.sort}
-          onSortChange={(s: string) =>
-            setQuery((q: QueryState) => ({
-              ...q,
-              sort: s as QueryState["sort"],
-              page: 1,
-            }))
-          }
-        />
-      </main>
+        {hasDiscount && (
+          <>
+            <del className="text-xs text-gray-400">
+              {p.compareAtPrice!.toLocaleString()}
+            </del>
+            <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">
+              %{percent}
+            </span>
+          </>
+        )}
+      </div>
+
+      <button
+        onClick={() => onAdd(p)}
+        disabled={busy}
+        className="mt-3 w-full bg-black text-white rounded-lg py-2 text-sm disabled:opacity-60"
+      >
+        {busy ? "در حال افزودن..." : "افزودن به سبد"}
+      </button>
     </div>
+  );
+}
+
+export default function ProductsPage() {
+  const sp = useSearchParams();
+  const tab = (sp.get("tab") || "").toLowerCase(); // "", "sets"
+
+  const [items, setItems] = useState<ProductItem[]>([]);
+  const [loading, setLoading] = useState<LoadState>("idle");
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string>("");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      setLoading("loading");
+      setMsg("");
+      try {
+        if (tab === "sets") {
+          // فقط «ست‌ها»: تگ‌های معادل ست
+          const setTags = ["set", "sets", "ست", "ست‌ها"];
+          const acc: ProductItem[] = [];
+          for (const t of setTags) {
+            const r = await fetchProducts({ tag: t, limit: 40 });
+            const list = Array.isArray(r?.results)
+              ? r.results
+              : Array.isArray(r as any)
+              ? (r as any)
+              : [];
+            for (const it of list as any[]) {
+              const id = String((it as any).id ?? "");
+              if (!acc.find((x) => x.id === id)) acc.push(it as ProductItem);
+            }
+          }
+          if (!cancelled) {
+            setItems(acc);
+            setLoading("done");
+          }
+        } else {
+          // تب «همه»
+          const r = await fetchProducts({ limit: 40 });
+          const list = Array.isArray(r?.results)
+            ? r.results
+            : Array.isArray(r as any)
+            ? (r as any)
+            : [];
+          if (!cancelled) {
+            setItems(list as ProductItem[]);
+            setLoading("done");
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          setLoading("error");
+          setMsg("خطا در بارگذاری محصولات");
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tab]);
+
+  // مرتب‌سازی ساده: ارزان‌ترها جلوتر
+  const sorted = useMemo(() => {
+    return [...items].sort((a, b) => {
+      const pa =
+        typeof a.price === "number" ? a.price : Number.MAX_SAFE_INTEGER;
+      const pb =
+        typeof b.price === "number" ? b.price : Number.MAX_SAFE_INTEGER;
+      return pa - pb;
+    });
+  }, [items]);
+
+  // افزودن به سبد (payloadهای رایج)
+  const addToCart = async (p: ProductItem) => {
+    try {
+      setBusyId(p.id);
+      setMsg("");
+      const candidates = [
+        { product: p.id, quantity: 1 },
+        { product_id: p.id, quantity: 1 },
+        { item: p.id, quantity: 1 },
+        { id: p.id, quantity: 1 },
+      ];
+      let ok = false;
+      let lastError = "";
+      for (const body of candidates) {
+        try {
+          const resp = await post(endpoints.cart, body, { throwOnHTTP: true });
+          if (resp) {
+            ok = true;
+            break;
+          }
+        } catch (err: any) {
+          lastError = err?.message || "خطا";
+        }
+      }
+      setMsg(ok ? "به سبد خرید اضافه شد ✅" : `عدم موفقیت در افزودن ❌ ${lastError}`);
+    } finally {
+      setBusyId(null);
+      setTimeout(() => setMsg(""), 2500);
+    }
+  };
+
+  return (
+    <main className="p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">
+          {tab === "sets" ? "ست‌ها" : "محصولات"}
+        </h1>
+        <Link href="/" className="underline">
+          بازگشت به خانه
+        </Link>
+      </div>
+
+      {/* تب‌ها */}
+      <div className="flex gap-3 text-sm">
+        <Link
+          href="/products"
+          className={`px-3 py-1 rounded-full border ${
+            tab !== "sets" ? "bg-black text-white" : ""
+          }`}
+        >
+          همه
+        </Link>
+        <Link
+          href="/products?tab=sets"
+          className={`px-3 py-1 rounded-full border ${
+            tab === "sets" ? "bg-black text-white" : ""
+          }`}
+        >
+          ست‌ها
+        </Link>
+      </div>
+
+      {loading === "loading" && (
+        <div className="text-sm text-gray-500">در حال بارگذاری…</div>
+      )}
+      {loading === "error" && (
+        <div className="text-sm text-red-600">
+          {msg || "خطایی رخ داد"}
+        </div>
+      )}
+      {loading === "done" && sorted.length === 0 && (
+        <div className="text-sm text-gray-500">محصولی یافت نشد.</div>
+      )}
+      {msg && loading !== "loading" && <div className="text-sm">{msg}</div>}
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+        {sorted.map((p) => (
+          <ProductCard
+            key={p.id}
+            p={p}
+            onAdd={addToCart}
+            busy={busyId === p.id}
+          />
+        ))}
+      </div>
+    </main>
   );
 }

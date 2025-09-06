@@ -1,29 +1,77 @@
-// src/lib/api.ts
-const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+/* ===================== BASE و مسیرها ===================== */
 
+// 1) تلاش برای گرفتن BASE از env (ترجیح با فوروارد Codespaces)
+const RAW_BASE =
+  process.env.NEXT_PUBLIC_API_BASE_URL ??
+  process.env.NEXT_PUBLIC_API_URL ??
+  "";
+
+// 2) نرمال‌سازی (حذف / انتهایی)
+let ABS_BASE = (RAW_BASE || "").replace(/\/+$/, "");
+
+// 3) اگر env نداشتی و روی کلاینت هستی، حدس دامنه Codespaces (3000 → 8000)
+if (!ABS_BASE && typeof window !== "undefined") {
+  const h = window.location.host; // مثل: abc-xyz-3000.app.github.dev
+  if (/\.app\.github\.dev$/.test(h)) {
+    ABS_BASE = `https://${h.replace(/-\d+\.app\.github\.dev$/, (m) =>
+      m.replace(/-\d+/, "-8000")
+    )}`;
+  }
+}
+
+/** مبنای ساخت URL مطلق برای تصویر (بدون /api) */
+const API_ORIGIN = (ABS_BASE || "").replace(/\/$/, "").replace(/\/api$/, "");
+
+/** اگر مسیر /media/ باشد، همان نسبی بماند تا از پروکسی Next استفاده شود */
+const absolutize = (url?: string | null): string => {
+  if (!url) return "";
+  if (url.startsWith("/media/")) return url;
+  if (/^https?:\/\//i.test(url)) return url;
+  return API_ORIGIN ? `${API_ORIGIN}${url.startsWith("/") ? "" : "/"}${url}` : url;
+};
+
+/**
+ * buildApiURL:
+ * - اگر ABS_BASE داشتیم، خروجی: https://.../api/<path>
+ * - اگر نداشتیم، خروجی نسبی: /api/<path> و توسط rewrites به بک‌اند پروکسی می‌شود.
+ */
+function buildApiURL(path: string): string {
+  const p = path.startsWith("/") ? path : `/${path}`;
+  return ABS_BASE ? `${ABS_BASE}/api${p}` : `/api${p}`;
+}
+
+/* ---------------- Endpoints ---------------- */
 export const endpoints = {
-  categories: `${BASE}/api/categories/`,
-  products:   `${BASE}/api/products/`,
-  bundles:    `${BASE}/api/bundles/`,
-  cart:       `${BASE}/api/cart/`,
-  cartClear:  `${BASE}/api/cart/clear/`,
-  checkout:   `${BASE}/api/orders/checkout/`,
+  home:       buildApiURL("/home/"),
+  categories: buildApiURL("/categories/"),
+  products:   buildApiURL("/products/"),
+  bundles:    buildApiURL("/bundles/"),
+  cart:       buildApiURL("/cart/"),
+  cartClear:  buildApiURL("/cart/clear/"),
+  orders:     buildApiURL("/orders/"),
+  checkout:   buildApiURL("/orders/checkout/"),
+  banners:    buildApiURL("/banners/"),
+
   auth: {
-    login:    `${BASE}/api/auth/login/`,
-    refresh:  `${BASE}/api/token/refresh/`,
-    register: `${BASE}/api/auth/register/`,
-    me:       `${BASE}/api/auth/me/`,
+    login:    buildApiURL("/auth/login/"),
+    register: buildApiURL("/auth/register/"),
+    me:       buildApiURL("/auth/me/"),
+    refresh:  buildApiURL("/token/refresh/"),
   },
 } as const;
 
+/* ===================== انواع و خطا ===================== */
+
+import type { HomePayload, ProductItem } from "@/types/home";
+
 type ReqOpts = {
-  auth?: boolean;          // اگر true باشد هدر Authorization اضافه می‌شود
+  auth?: boolean;
   init?: RequestInit;
-  fallback?: any;          // مقدار پیش‌فرض در صورت خطا
-  throwOnHTTP?: boolean;   // اگر false باشد 4xx هم throw نمی‌کند
+  fallback?: any;
+  throwOnHTTP?: boolean;
 };
 
-class ApiError extends Error {
+export class ApiError extends Error {
   status: number;
   payload?: unknown;
   url: string;
@@ -36,114 +84,36 @@ class ApiError extends Error {
   }
 }
 
-/* ---------------- JWT helpers ---------------- */
-function b64urlToUtf8(s?: string): string {
-  if (!s) return "";
+/* ===================== JWT helpers & storage ===================== */
+
+function getStoredAccess(): string | null {
   try {
-    const pad = s.length % 4 ? "=".repeat(4 - (s.length % 4)) : "";
-    const base = (s + pad).replace(/-/g, "+").replace(/_/g, "/");
-    // کار در هر دو محیط: مرورگر (atob) و Node (Buffer)
-    const g: any = globalThis as any;
-    const bin =
-      typeof atob === "function"
-        ? atob(base)
-        : g?.Buffer?.from(base, "base64")?.toString("binary");
-
-    if (!bin) return "";
-
-    const uri = Array.prototype
-      .map.call(bin, (c: string) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-      .join("");
-
-    return decodeURIComponent(uri);
-  } catch {
-    return "";
-  }
-}
-
-function parseJwt(token?: string): any | null {
-  if (!token || typeof token !== "string") return null;
-  try {
-    const parts = token.split(".");
-    const payload = parts.length > 1 ? parts[1] : undefined;
-    const json = b64urlToUtf8(payload);
-    if (!json) return null;
-    return JSON.parse(json);
-  } catch {
-    return null;
-  }
-}
-
-function isAccessToken(token: string): boolean {
-  const p = parseJwt(token);
-  if (p && typeof p === "object") {
-    if (p.token_type && typeof p.token_type === "string") {
-      return p.token_type.toLowerCase() === "access";
-    }
-    // اگر token_type نباشد، فرض را بر access می‌گذاریم
-  }
-  return true;
-}
-function isRefreshToken(token: string): boolean {
-  const p = parseJwt(token);
-  return !!(p && typeof p === "object" && String(p.token_type || "").toLowerCase() === "refresh");
-}
-
-/* ---------------- token storage ---------------- */
-function getStoredToken(): string | null {
-  try {
-    // فقط کلیدهای مشخص access را چک کن؛ از "token" فقط در صورت access شدن استفاده کن
     const keys = ["access", "access_token", "auth_token", "token"];
     for (const k of keys) {
       const v = localStorage.getItem(k);
-      if (v && typeof v === "string") {
-        const t = v.replace(/^Bearer\s+/i, "").trim();
-        if (t && isAccessToken(t)) return t;
-      }
-    }
-    if (typeof document !== "undefined") {
-      const m = document.cookie.match(/(?:^|;\s*)(access|access_token|token)=([^;]+)/i);
-      if (m && m[2]) {
-        const t = decodeURIComponent(m[2]).replace(/^Bearer\s+/i, "").trim();
-        if (t && isAccessToken(t)) return t;
-      }
+      if (v) return v.replace(/^Bearer\s+/i, "").trim();
     }
   } catch {}
   return null;
 }
+
 function getStoredRefresh(): string | null {
   try {
     const keys = ["refresh", "refresh_token"];
     for (const k of keys) {
       const v = localStorage.getItem(k);
-      if (v && typeof v === "string") {
-        const t = v.trim();
-        if (t && (isRefreshToken(t) || !isAccessToken(t))) return t;
-      }
-    }
-    if (typeof document !== "undefined") {
-      const m = document.cookie.match(/(?:^|;\s*)(refresh|refresh_token)=([^;]+)/i);
-      if (m && m[2]) {
-        const t = decodeURIComponent(m[2]).trim();
-        if (t && (isRefreshToken(t) || !isAccessToken(t))) return t;
-      }
+      if (v) return v.trim();
     }
   } catch {}
   return null;
 }
+
 function saveAccessToken(tok: string) {
   try {
     const t = tok.replace(/^Bearer\s+/i, "").trim();
-    // برای سازگاری عقب‌رو
     localStorage.setItem("access", t);
     localStorage.setItem("access_token", t);
     localStorage.setItem("token", t);
-  } catch {}
-}
-export function saveRefreshToken(tok: string) {
-  try {
-    localStorage.setItem("refresh", tok.trim());
-    localStorage.setItem("refresh_token", tok.trim());
   } catch {}
 }
 export function clearTokens() {
@@ -152,7 +122,8 @@ export function clearTokens() {
   } catch {}
 }
 
-/* ---------------- helpers ---------------- */
+/* ===================== utilities ===================== */
+
 function extractMessage(payload: unknown, res: Response): string {
   if (typeof payload === "string" && payload.trim()) return payload.trim();
   const p = payload as any;
@@ -176,30 +147,42 @@ function extractMessage(payload: unknown, res: Response): string {
   return `API ${res.status}: ${res.statusText}`;
 }
 
-/* --------------- core request with auto-refresh --------------- */
+function buildQuery(params?: Record<string, any>): string {
+  if (!params) return "";
+  const q = new URLSearchParams();
+  Object.entries(params).forEach(([k, v]) => {
+    if (v === undefined || v === null || v === "") return;
+    if (Array.isArray(v)) v.forEach(item => q.append(k, String(item)));
+    else q.append(k, String(v));
+  });
+  const s = q.toString();
+  return s ? `?${s}` : "";
+}
+
+/** تبدیل امن عدد از number/string (حذف کامای انگلیسی/فارسی و فاصله) */
+const toNum = (v: any): number => {
+  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+  if (v == null) return 0;
+  const n = Number(String(v).replace(/[,٬\s]/g, ""));
+  return Number.isFinite(n) ? n : 0;
+};
+
+/* ===================== هستهٔ request + refresh ===================== */
+
 async function request<T = any>(url: string, init: RequestInit = {}, opts?: ReqOpts): Promise<T> {
   if (!url) throw new Error("request(): URL is empty");
 
-  const makeHeaders = (base?: HeadersInit, hasBody?: boolean) => {
-    const h = new Headers(base || {});
-    if (!h.has("Accept")) h.set("Accept", "application/json, text/plain;q=0.9,*/*;q=0.8");
-    if (hasBody && !h.has("Content-Type")) h.set("Content-Type", "application/json");
-    return h;
-  };
+  const headers = new Headers(init.headers || {});
+  if (!headers.has("Accept")) headers.set("Accept", "application/json, text/plain;q=0.9,*/*;q=0.8");
+  if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
 
-  const attachAuth = (h: Headers) => {
-    if (opts?.auth) {
-      const tok = getStoredToken();
-      if (tok && isAccessToken(tok)) {
-        h.set("Authorization", `Bearer ${tok}`);
-      }
-    }
-  };
+  if (opts?.auth) {
+    const tok = getStoredAccess();
+    if (tok) headers.set("Authorization", `Bearer ${tok}`);
+  }
 
-  const doFetch = async (): Promise<Response> => {
-    const headers = makeHeaders(init.headers as HeadersInit, !!init.body);
-    attachAuth(headers);
-    return fetch(url, {
+  const doFetch = () =>
+    fetch(url, {
       cache: "no-store",
       // @ts-ignore
       next: { revalidate: 0 },
@@ -207,11 +190,10 @@ async function request<T = any>(url: string, init: RequestInit = {}, opts?: ReqO
       headers,
       credentials: init.credentials ?? "same-origin",
     });
-  };
 
   let res = await doFetch();
 
-  // اگر 401 شد: تلاش برای رفرش توکن و تکرار درخواست
+  // تلاش برای رفرش توکن
   if (opts?.auth && res.status === 401 && endpoints.auth.refresh) {
     const refresh = getStoredRefresh();
     if (refresh) {
@@ -224,12 +206,18 @@ async function request<T = any>(url: string, init: RequestInit = {}, opts?: ReqO
         });
         if (rr.ok) {
           const data = await rr.json().catch(() => ({} as any));
-          if (data?.access) {
-            saveAccessToken(data.access);
-            res = await doFetch(); // retry با access جدید
+          if ((data as any)?.access) {
+            saveAccessToken((data as any).access);
+            res = await doFetch();
+          } else {
+            clearTokens();
           }
+        } else {
+          clearTokens();
         }
-      } catch {}
+      } catch {
+        clearTokens();
+      }
     }
   }
 
@@ -239,26 +227,9 @@ async function request<T = any>(url: string, init: RequestInit = {}, opts?: ReqO
       const ct = res.headers.get("content-type") || "";
       payload = ct.includes("application/json") ? await res.json() : await res.text();
     } catch {}
-
-    // اگر توکن نامعتبر بود، پاک‌سازی تا لاگین مجدد
-    const detail = typeof payload === "string" ? payload : (payload as any)?.detail;
-    if (res.status === 401 && typeof detail === "string" &&
-        /Given token not valid|credentials were not provided|not authenticated/i.test(detail)) {
-      clearTokens();
-    }
-
     const msg = extractMessage(payload, res);
-    const err = new ApiError({ message: msg, status: res.status, url, payload });
-
-    if (res.status >= 500) {
-      console.error("API " + res.status, msg, { url, payload });
-      return (opts?.fallback ?? null) as T;
-    }
-    if (opts?.throwOnHTTP === false) {
-      console.warn("API " + res.status, msg, { url, payload });
-      return (opts?.fallback ?? null) as T;
-    }
-    throw err;
+    if (opts?.throwOnHTTP === false) return (opts?.fallback ?? null) as T;
+    throw new ApiError({ message: msg, status: res.status, url, payload });
   }
 
   if (res.status === 204) return (opts?.fallback ?? null) as T;
@@ -267,16 +238,244 @@ async function request<T = any>(url: string, init: RequestInit = {}, opts?: ReqO
   return (ct.includes("application/json") ? await res.json() : await res.text()) as T;
 }
 
-/* --------------- exported helpers --------------- */
+/* ===================== خروجی عمومی ===================== */
+
 export const get  = <T = any>(url: string, opts?: ReqOpts) =>
   request<T>(url, { method: "GET" }, opts);
 
 export const post = <T = any>(url: string, body?: any, opts?: ReqOpts) =>
-  request<T>(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: body ? JSON.stringify(body) : undefined,
-  }, opts);
+  request<T>(
+    url,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: body ? JSON.stringify(body) : undefined,
+    },
+    opts
+  );
 
 export const del  = <T = any>(url: string, opts?: ReqOpts) =>
   request<T>(url, { method: "DELETE" }, opts);
+
+/* ===================== کمکی‌های محتوایی برای هوم ===================== */
+
+type AnyList<T=any> = { results?: T[] } | T[] | null | undefined;
+const listify = <T=any>(x: AnyList<T>): T[] =>
+  Array.isArray(x) ? x : (Array.isArray((x as any)?.results) ? (x as any).results : []);
+
+const tryGet = async <T=any>(url: string, fallback: T): Promise<T> =>
+  get<T>(url, { throwOnHTTP: false, fallback });
+
+/** نرمال‌سازی آیتم «محصول» به ProductItem با imageUrl مطلق/قابل‌استفاده */
+function normalizeProduct(it: any): ProductItem {
+  const imageCandidate =
+    it?.imageUrl ?? it?.image ?? it?.thumbnail ?? it?.main_image ?? it?.cover ?? "";
+  const imageUrl = absolutize(imageCandidate);
+
+  const price = toNum(it?.price) || toNum(it?.final_price) || 0;
+
+  return {
+    id: String(it?.id ?? it?.pk ?? ""),
+    title: String(it?.title ?? it?.name ?? "بدون عنوان"),
+    imageUrl,
+    price,
+    compareAtPrice:
+      toNum(it?.compare_at_price) ||
+      toNum(it?.original_price) ||
+      toNum(it?.list_price) || null,
+    link: typeof it?.slug === "string" ? `/product/${it.slug}` : it?.link ?? "#",
+    badge: it?.badge ?? null,
+  };
+}
+
+/** نرمال‌سازی آیتم «باندل» به فرم ProductItem (قیمت/لینک صحیح) */
+function normalizeBundleAsProduct(b: any): ProductItem {
+  return {
+    id: String(b?.id ?? b?.pk ?? ""),
+    title: String(b?.title ?? b?.name ?? "بدون عنوان"),
+    imageUrl: absolutize(b?.image ?? b?.imageUrl ?? b?.cover ?? ""),
+    price:
+      toNum(b?.bundle_price) ||
+      toNum(b?.final_price) ||
+      toNum(b?.price) || 0,
+    compareAtPrice: null,
+    link: typeof b?.slug === "string" ? `/bundles/${b.slug}` : (b?.link ?? "#"), // یک‌دست روی /bundles/
+    badge: b?.badge ?? "باندل",
+  };
+}
+
+/** تشخیص خودکار: اگر bundle_price داشت → باندل؛ وگرنه محصول معمولی */
+function normalizeAnyProduct(it: any): ProductItem {
+  const isBundle =
+    toNum(it?.bundle_price) > 0 ||
+    String(it?.type || "").toLowerCase() === "bundle";
+  return isBundle ? normalizeBundleAsProduct(it) : normalizeProduct(it);
+}
+
+/* تلاش برای ساخت VIP از باندل/پروداکت با تگ‌های رایج + fallback به active */
+async function buildVipBlock() {
+  const tagKeys = ["vip", "VIP", "وی‌آی‌پی", "پکیج-وی-آی-پی", "package_vip"];
+
+  // ۱) باندل‌های تگ‌دار
+  for (const t of tagKeys) {
+    const bundles = await tryGet<any>(
+      endpoints.bundles + buildQuery({ tag: t, limit: 20 }),
+      { results: [] }
+    );
+    const items = listify(bundles).map(normalizeBundleAsProduct);
+    if (items.length) {
+      return {
+        endsAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+        products: items,
+        seeAllLink: "/vip",
+      };
+    }
+  }
+
+  // ۲) همه باندل‌های فعال
+  const allActiveBundles = await tryGet<any>(
+    endpoints.bundles + buildQuery({ active: true, limit: 20 }),
+    { results: [] }
+  );
+  const activeItems = listify(allActiveBundles).map(normalizeBundleAsProduct);
+  if (activeItems.length) {
+    return {
+      endsAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+      products: activeItems,
+      seeAllLink: "/vip",
+    };
+  }
+
+  // ۳) محصولات تگ‌دار VIP (اگر باندل نبود)
+  for (const t of tagKeys) {
+    const prods = await tryGet<any>(
+      endpoints.products + buildQuery({ tag: t, limit: 20 }),
+      { results: [] }
+    );
+    const items = listify(prods).map(normalizeProduct);
+    if (items.length) {
+      return {
+        endsAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+        products: items,
+        seeAllLink: "/vip",
+      };
+    }
+  }
+
+  return { endsAt: new Date().toISOString(), products: [], seeAllLink: "/vip" };
+}
+
+/* ست‌ها و پافر از محصولات با تگ‌های رایج */
+async function buildSetsAndPuffer() {
+  const tagCombos = [
+    ["set", "sets", "ست", "ست‌ها"],
+    ["puffer", "پافر", "پافرها"],
+  ];
+  const collected: ProductItem[] = [];
+  for (const tags of tagCombos) {
+    for (const t of tags) {
+      const res = await tryGet<any>(
+        endpoints.products + buildQuery({ tag: t, limit: 20 }),
+        { results: [] }
+      );
+      const items = listify(res).map(normalizeAnyProduct); // ← تشخیص خودکار
+      for (const it of items) {
+        if (!collected.find(x => x.id === it.id)) collected.push(it);
+      }
+    }
+  }
+  return { items: collected.slice(0, 40) };
+}
+
+/* بنرها (اختیاری اگر /home برنگرداند) */
+async function fetchBannersFallback() {
+  const res = await tryGet<any>(endpoints.banners, []);
+  return res;
+}
+
+/* ===================== توابع مخصوص ===================== */
+
+// داده صفحه اصلی با fallback‌های مطمئن و نرمال‌سازی صحیح باندل/محصول
+export async function fetchHome() {
+  const base = await get<HomePayload>(endpoints.home, { throwOnHTTP: true });
+
+  // VIP
+  let vip = (base as any)?.vip;
+  if (!vip || !Array.isArray(vip.products) || vip.products.length === 0) {
+    vip = await buildVipBlock();
+  } else {
+    vip = {
+      ...vip,
+      products: (vip.products || []).map(normalizeAnyProduct), // ← مهم
+    };
+  }
+
+  // ست‌ها و پافر
+  let setsAndPuffer = (base as any)?.setsAndPuffer;
+  if (!setsAndPuffer || !Array.isArray(setsAndPuffer.items) || setsAndPuffer.items.length === 0) {
+    setsAndPuffer = await buildSetsAndPuffer();
+  } else {
+    setsAndPuffer = {
+      ...setsAndPuffer,
+      items: (setsAndPuffer.items || []).map(normalizeAnyProduct), // ← مهم
+    };
+  }
+
+  // بنرها
+  const banners = (base as any)?.banners ?? (await fetchBannersFallback());
+
+  // heroSlides
+  const heroSlides =
+    Array.isArray((base as any)?.heroSlides) && (base as any).heroSlides.length
+      ? (base as any).heroSlides
+      : undefined;
+
+  return {
+    ...base,
+    vip,
+    setsAndPuffer,
+    banners,
+    ...(heroSlides ? { heroSlides } : {}),
+  } as HomePayload & {
+    vip: { endsAt?: string; products?: any[]; seeAllLink?: string };
+    setsAndPuffer: { items?: any[] };
+    banners?: any;
+  };
+}
+
+/* گرفتن لیست محصولات */
+export type ProductsQuery = {
+  page?: number;
+  page_size?: number | string;
+  limit?: number | string;
+  search?: string;
+  ordering?: string;
+  category?: string | number;
+  tag?: string | number;
+  min_price?: number;
+  max_price?: number;
+  in_stock?: boolean;
+  ids?: (string | number)[];
+};
+
+export type PaginatedResponse<T> = {
+  results?: T[];
+  count?: number;
+  next?: string | null;
+  previous?: string | null;
+} & Record<string, any>;
+
+export async function fetchProducts(params?: ProductsQuery) {
+  const url = endpoints.products + buildQuery(params);
+  return get<PaginatedResponse<ProductItem>>(url, { throwOnHTTP: true });
+}
+
+export async function fetchProductById(id: string | number) {
+  const url = `${endpoints.products}${id}/`;
+  return get<ProductItem>(url, { throwOnHTTP: true });
+}
+
+export async function fetchBundles(params?: Record<string, any>) {
+  const url = endpoints.bundles + buildQuery(params);
+  return get<PaginatedResponse<any>>(url, { throwOnHTTP: true });
+}

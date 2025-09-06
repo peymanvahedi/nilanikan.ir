@@ -1,104 +1,167 @@
-"use client";
+// app/page.tsx
+export const dynamic = "force-dynamic";
 
-import { useEffect, useState } from "react";
 import BannerSlider from "../components/BannerSlider";
-import CustomerCarousel from "../components/CustomerCarousel";
-import AmazingDealsSlider, { type DealItem } from "../components/AmazingDealsSlider";
-import NilaNikanSetsSlider, { type SetItem } from "../components/NilaNikanSetsSlider";
-import { get, endpoints } from "@/lib/api";
+import StorySliderWrapper from "../components/StorySliderWrapper";
+import VIPDealsSlider from "../components/VIPDealsSlider";
+import CardSlider from "../components/CardSlider";
+import MiniLooksSlider from "../components/MiniLooksSlider";
+import BestSellersSlider from "../components/BestSellersSlider";
+import BannersRow from "../components/BannersRow";
+import NewArrivalsSlider from "../components/NewArrivalsSlider";
+import { fetchHome } from "@/lib/api";
+import type { Slide } from "@/types/home";
 
-const FALLBACK_IMG_PRODUCT = "/placeholder-product.png"; // داخل public بگذار
-const FALLBACK_IMG_BUNDLE  = "/placeholder-bundle.png";  // داخل public بگذار
+// برای ساخت URL مطلق وقتی API تصویر مسیر نسبی می‌دهد
+const API_ORIGIN = (process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || "")
+  .replace(/\/$/, "")
+  .replace(/\/api$/, "");
 
-export default function Home() {
-  const [products, setProducts] = useState<SetItem[]>([]);
-  const [deals, setDeals] = useState<DealItem[]>([]);
-  const [bundles, setBundles] = useState<SetItem[]>([]);
+// اگر مسیر /media/ باشد، همان نسبی بماند تا از پروکسی Next استفاده شود
+const absolutize = (url?: string | null): string => {
+  if (!url) return "";
+  if (url.startsWith("/media/")) return url;
+  if (/^https?:\/\//i.test(url)) return url;
+  return API_ORIGIN ? `${API_ORIGIN}${url.startsWith("/") ? "" : "/"}${url}` : url;
+};
 
-  useEffect(() => {
-    (async () => {
-      const [prodData, bundleData] = await Promise.all([
-        get(endpoints.products),
-        get(`${endpoints.bundles}?active=true`),
-      ]);
+type BannerApiItem = {
+  id: number | string;
+  image?: string;
+  imageUrl?: string;
+  href?: string | null;
+  alt?: string | null;
+  title?: string | null;
+};
+type BannersApiResponse =
+  | BannerApiItem[]
+  | { count: number; next: string | null; previous: string | null; results: BannerApiItem[] };
 
-      const prodRaw   = Array.isArray(prodData)   ? prodData   : prodData?.results   ?? [];
-      const bundleRaw = Array.isArray(bundleData) ? bundleData : bundleData?.results ?? [];
+type HomeData = {
+  stories?: any[];
+  vip?: { endsAt?: string; products?: any[]; seeAllLink?: string };
+  setsAndPuffer?: { items?: any[] };
+  miniLooks?: any[];
+  bestSellers?: any[];
+  banners?: BannersApiResponse;
+  newArrivals?: any[];
+  heroSlides?: Slide[];
+};
 
-      // محصولات
-      const normalizedProducts: SetItem[] = prodRaw.map((p: any) => ({
-        id: p.id,
-        name: p.title || p.name || `محصول ${p.id}`,
-        image: p.image || p.thumbnail || p.images?.[0] || FALLBACK_IMG_PRODUCT,
-        price: Number(p.final_price ?? p.discount_price ?? p.price ?? 0),
-        href: `/product/${p.slug ?? p.id}`,
-      }));
-      setProducts(normalizedProducts);
+function extractBanners(b: BannersApiResponse | undefined): BannerApiItem[] {
+  if (!b) return [];
+  if (Array.isArray(b)) return b;
+  return Array.isArray(b.results) ? b.results : [];
+}
 
-      // شگفت‌انگیزها
-      const mappedDeals: DealItem[] = prodRaw
-        .map((p: any): DealItem => {
-          const oldPrice = Number(p.price ?? 0);
-          const price = Number(p.final_price ?? p.discount_price ?? oldPrice);
-          return {
-            id: p.id,
-            name: p.title || p.name || `محصول ${p.id}`,
-            image: p.image || p.thumbnail || p.images?.[0] || FALLBACK_IMG_PRODUCT,
-            price,
-            oldPrice,
-            href: `/product/${p.slug ?? p.id}`,
-          };
-        })
-        .filter(
-          (d: DealItem): d is DealItem & { oldPrice: number; price: number } =>
-            Number.isFinite(Number(d.oldPrice)) &&
-            Number.isFinite(Number(d.price)) &&
-            Number(d.oldPrice) > Number(d.price)
-        );
-      setDeals(mappedDeals);
+function mapBannersToSlides(banners: BannerApiItem[]): Slide[] {
+  return (banners ?? [])
+    .map((b, i) => ({
+      id: String(b?.id ?? i),
+      imageUrl: absolutize(b.imageUrl ?? b.image ?? ""),
+      link: (b.href ?? "#") as string,
+      alt: (b.alt ?? b.title ?? `banner ${i + 1}`) as string,
+      title: b.title ?? undefined,
+    }))
+    .filter((s) => !!s.imageUrl);
+}
 
-      // باندل‌ها
-      const normalizedBundles: SetItem[] = bundleRaw.map((b: any) => {
-        const productImage =
-          b?.products?.[0]?.image ||
-          b?.items?.[0]?.product?.image ||
-          b?.first_product?.image ||
-          null;
+export default async function Page() {
+  let data: HomeData;
+  try {
+    data = (await fetchHome()) as unknown as HomeData;
+  } catch {
+    data = {
+      stories: [],
+      vip: { endsAt: new Date().toISOString(), products: [], seeAllLink: "/vip" },
+      setsAndPuffer: { items: [] },
+      miniLooks: [],
+      bestSellers: [],
+      banners: [],
+      newArrivals: [],
+      heroSlides: [],
+    };
+  }
 
-        return {
-          id: b.id,
-          name: b.title || b.name || `باندل ${b.id}`,
-          image: b.image || b.thumbnail || productImage || FALLBACK_IMG_BUNDLE,
-          price: Number(b.final_price ?? b.bundle_price ?? b.discount_price ?? b.price ?? 0),
-          // 👇 جمع شد
-          href: `/bundles/${b.slug ?? b.id}`,
-        };
-      });
-      setBundles(normalizedBundles);
-    })().catch((e) => {
-      console.error("home data load error:", e);
-      setProducts([]); setDeals([]); setBundles([]);
-    });
-  }, []);
+  // بنرها از API هوم
+  const bannersFromHome = Array.isArray(data.heroSlides) ? data.heroSlides : [];
+
+  // بنرهای جداگانه
+  let bannerItems = extractBanners(data.banners);
+  if (!bannerItems.length) {
+    try {
+      // استفاده از rewrite داخلی Next: /api/* → بک‌اند
+      const res = await fetch("/api/banners/", { cache: "no-store" });
+      if (!res.ok) throw new Error(`Failed to fetch banners: ${res.status}`);
+      const json = await res.json();
+      bannerItems = Array.isArray(json) ? json : (json.results ?? []);
+    } catch (e) {
+      console.error("fallback banners fetch failed:", e);
+      bannerItems = [];
+    }
+  }
+
+  // اگر heroSlides خالی بود → از بنرها استفاده کن
+  const heroSlides: Slide[] =
+    bannersFromHome.length > 0
+      ? bannersFromHome.map((s, i) => ({
+          ...s,
+          imageUrl: absolutize((s as any).imageUrl ?? (s as any).image ?? ""),
+          link: (s as any).link ?? (s as any).href ?? undefined,
+          alt: s.alt ?? s.title ?? `banner ${i + 1}`,
+        }))
+      : mapBannersToSlides(bannerItems);
 
   return (
-    <div className="min-h-screen bg-white text-slate-800" dir="rtl">
-      <main className="mx-auto max-w-6xl px-4 py-8 space-y-12">
-        <BannerSlider />
-        <CustomerCarousel />
+    <main className="p-6 space-y-12">
+      {/* مرحله ۰: بنر بالای صفحه */}
+      <section className="relative z-20">
+        <BannerSlider {...(heroSlides.length ? { slides: heroSlides } : {})} />
+      </section>
 
-        {bundles.length > 0 && (
-          <NilaNikanSetsSlider title="باندل‌ها" items={bundles} autoplay intervalMs={5000} />
-        )}
+      {/* مرحله ۱: استوری‌ها */}
+      <section aria-label="استوری تن‌خور بچه‌ها">
+        <StorySliderWrapper items={(data.stories ?? []).slice(0, 50)} />
+      </section>
 
-        {deals.length > 0 && (
-          <AmazingDealsSlider title="شگفت‌انگیزها" items={deals} countdownSeconds={0} />
-        )}
+      {/* مرحله ۲: VIP */}
+      <section aria-label="پکیج VIP">
+        <VIPDealsSlider
+          endsAt={data.vip?.endsAt ?? new Date().toISOString()}
+          seeAllLink={data.vip?.seeAllLink || "/vip"}
+          products={data.vip?.products ?? []}
+        />
+      </section>
 
-        {products.length > 0 && (
-          <NilaNikanSetsSlider title="محصولات" items={products} autoplay intervalMs={4500} />
-        )}
-      </main>
-    </div>
+      {/* مرحله ۳: ست‌ها و پافر */}
+      <section aria-label="ست‌ها و پافر">
+        <CardSlider
+          title="ست‌ها و پافر"
+          items={(data.setsAndPuffer?.items ?? []).slice(0, 20)}
+          ctaHref="/products?tab=sets"   // ← اینجا اصلاح شد
+          ctaText="مشاهده همه"
+        />
+      </section>
+
+      {/* مرحله ۴: تن‌خور کوچک */}
+      <section aria-label="تن‌خور کوچک بچه‌ها">
+        <MiniLooksSlider items={(data.miniLooks ?? []).slice(0, 10)} />
+      </section>
+
+      {/* مرحله ۵: پرفروش‌ترین‌ها */}
+      <section aria-label="پرفروش‌ترین‌ها">
+        <BestSellersSlider products={data.bestSellers ?? []} />
+      </section>
+
+      {/* مرحله ۶: بنرهای حراج */}
+      <section aria-label="بنرهای حراج">
+        <BannersRow banners={bannerItems as any} />
+      </section>
+
+      {/* مرحله ۷: جدیدترین‌ها */}
+      <section aria-label="جدیدترین‌ها">
+        <NewArrivalsSlider products={(data.newArrivals ?? []).slice(0, 8)} />
+      </section>
+    </main>
   );
 }

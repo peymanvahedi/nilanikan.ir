@@ -1,38 +1,52 @@
 "use client";
 
+import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
+import type { Slide as HomeSlide } from "@/types/home";
 
-type Slide = { id: number; src: string; href?: string; alt?: string };
-
-const slides: Slide[] = [
-  { id: 1, src: "/banners/banner-1.jpg", alt: "بنر ۱" },
-  { id: 2, src: "/banners/banner-2.jpg", alt: "بنر ۲" },
-  { id: 3, src: "/banners/banner-3.jpg", alt: "بنر ۳" },
-];
+type Slide = { id?: number | string; src: string; href?: string; alt?: string };
+type Props = { slides?: HomeSlide[] };
 
 const AUTOPLAY_MS = 5000;
 
-export default function BannerSlider() {
+function normalize(input?: HomeSlide[]): Slide[] {
+  if (!input?.length) return [];
+  return input.map((s, i) => ({
+    id: s.id ?? i + 1,
+    src: (s as any).imageUrl ?? (s as any).image ?? "",
+    href: (s as any).link ?? (s as any).href ?? undefined,
+    alt: s.alt ?? s.title ?? `banner ${i + 1}`,
+  }));
+}
+
+export default function BannerSlider({ slides }: Props) {
+  const [items, setItems] = useState<Slide[]>(normalize(slides));
   const [index, setIndex] = useState(0);
+
   const trackRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  useEffect(() => {
+    setItems(normalize(slides));
+  }, [slides]);
+
   function goTo(i: number) {
-    setIndex(i);
+    const len = items.length;
+    if (!len) return;
+    const next = ((i % len) + len) % len;
+    setIndex(next);
     const track = trackRef.current;
-    if (!track) return;
-    // همیشه به سمت چپ اسلاید کن
-    track.style.transform = `translateX(${-i * 100}%)`;
+    if (track) track.style.transform = `translate3d(${-next * 100}%, 0, 0)`;
   }
 
   function start() {
     stop();
-    timerRef.current = setTimeout(() => {
-      goTo((index + 1) % slides.length);
-    }, AUTOPLAY_MS);
+    if (items.length <= 1) return;
+    timerRef.current = setTimeout(() => goTo(index + 1), AUTOPLAY_MS);
   }
+
   function stop() {
     if (timerRef.current) {
       clearTimeout(timerRef.current);
@@ -40,94 +54,72 @@ export default function BannerSlider() {
     }
   }
 
-  // autoplay
   useEffect(() => {
-    if (slides.length <= 1) return;
+    if (items.length <= 1) return;
     start();
     return stop;
-  }, [index]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index, items.length]);
 
-  // swipe موبایل
-  useEffect(() => {
-    const node = containerRef.current;
-    if (!node) return;
-
-    let startX = 0;
-    let dx = 0;
-
-    const onTouchStart = (e: TouchEvent) => {
-      stop();
-      startX = (e.touches[0] as Touch).clientX;
-      dx = 0;
-    };
-    const onTouchMove = (e: TouchEvent) => {
-      dx = (e.touches[0] as Touch).clientX - startX;
-    };
-    const onTouchEnd = () => {
-      if (Math.abs(dx) > 40) {
-        const next = dx < 0 ? index + 1 : index - 1;
-        goTo((next + slides.length) % slides.length);
-      } else {
-        start();
-      }
-    };
-
-    node.addEventListener("touchstart", onTouchStart, { passive: true });
-    node.addEventListener("touchmove", onTouchMove, { passive: true });
-    node.addEventListener("touchend", onTouchEnd);
-
-    return () => {
-      node.removeEventListener("touchstart", onTouchStart);
-      node.removeEventListener("touchmove", onTouchMove);
-      node.removeEventListener("touchend", onTouchEnd);
-    };
-  }, [index]);
-
-  if (slides.length === 0) return null;
+  if (!items.length) return null;
 
   return (
-    <section
-      className="relative z-20 w-full select-none"
-      aria-label="اسلایدر بنر"
-    >
+    <section className="relative z-20 w-full select-none" aria-label="اسلایدر بنر">
       <div
         ref={containerRef}
-        className="relative w-full aspect-[16/9] md:aspect-[16/5] max-h-[460px] overflow-hidden rounded-xl bg-zinc-100"
+        className="
+          relative w-full overflow-hidden rounded-xl bg-zinc-100
+          h-[220px] sm:h-[280px] md:h-[360px] lg:h-[420px] xl:h-[460px]
+        "
+        onMouseEnter={stop}
+        onMouseLeave={start}
       >
         {/* track */}
         <div
           ref={trackRef}
-          className="flex h-full w-full transition-transform duration-500 ease-out"
-          style={{ transform: "translateX(0%)" }}
+          className="flex h-full w-full transition-transform duration-500 ease-out will-change-transform"
+          style={{ transform: "translate3d(0,0,0)" }}
           dir="ltr"
         >
-          {slides.map((s) => (
-            <div key={s.id} className="relative shrink-0 w-full h-full">
+          {items.map((s, i) => {
+            const img = (
               <Image
+                key={s.id ?? i}
                 src={s.src}
-                alt={s.alt ?? "banner"}
+                alt={s.alt || `banner ${i + 1}`}
                 fill
                 className="object-cover"
+                priority={i === 0}
                 sizes="100vw"
-                priority={s.id === 1}
+                unoptimized
+                onError={(e) => {
+                  console.warn("Banner image failed:", s.src, e);
+                }}
               />
-            </div>
-          ))}
+            );
+            return (
+              <div key={`slide-${s.id ?? i}`} className="relative shrink-0 w-full h-full">
+                {s.href ? <Link href={s.href}>{img}</Link> : img}
+              </div>
+            );
+          })}
         </div>
 
-        {/* دات‌ها */}
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-2 bg-black/20 backdrop-blur rounded-full px-2 py-1">
-          {slides.map((_, i) => (
-            <button
-              key={i}
-              onClick={() => goTo(i)}
-              className={`h-2.5 w-2.5 rounded-full transition-all ${
-                i === index ? "w-6 bg-white" : "bg-white/60 hover:bg-white/80"
-              }`}
-              aria-label={`اسلاید ${i + 1}`}
-            />
-          ))}
-        </div>
+        {/* dots */}
+        {items.length > 1 && (
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-2 bg-black/25 backdrop-blur rounded-full px-2 py-1">
+            {items.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => goTo(i)}
+                className={`h-2.5 rounded-full transition-all ${
+                  i === index ? "w-6 bg-white" : "w-2.5 bg-white/70 hover:bg-white"
+                }`}
+                aria-label={`اسلاید ${i + 1}`}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );

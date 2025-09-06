@@ -19,7 +19,7 @@ const FALLBACK_IMG = "/placeholder-bundle.png";
 export default function NilaNikanSetsSlider({
   items = [],
   title = "انواع ست",
-  allLink = "/collection/set",   // ✅ لیست موجود خودت
+  allLink = "/collection/set",
   autoplay = true,
   intervalMs = 4000,
 }: {
@@ -31,7 +31,6 @@ export default function NilaNikanSetsSlider({
 }) {
   const data = (items?.length ? items : []).map((x) => ({
     ...x,
-    // ✅ جزئیات: /bundle/[id or slug]
     href: x.href ?? `/bundle/${x.slug ?? x.id}`,
     image: x.image || FALLBACK_IMG,
   }));
@@ -114,6 +113,7 @@ export default function NilaNikanSetsSlider({
             onClick={prev}
             className="pointer-events-auto w-8 h-8 md:w-9 md:h-9 rounded-full bg-white text-pink-700 shadow grid place-items-center hover:bg-pink-50"
             aria-label="قبلی"
+            title="قبلی"
           >
             ‹
           </button>
@@ -123,6 +123,7 @@ export default function NilaNikanSetsSlider({
             onClick={next}
             className="pointer-events-auto w-8 h-8 md:w-9 md:h-9 rounded-full bg-white text-pink-700 shadow grid place-items-center hover:bg-pink-50"
             aria-label="بعدی"
+            title="بعدی"
           >
             ›
           </button>
@@ -140,49 +141,46 @@ export default function NilaNikanSetsSlider({
               className="shrink-0 snap-center
                          w-[45%] sm:w-[48%] md:w-[32%] lg:w-[24%] xl:w-[20%]
                          rounded-2xl bg-white ring-1 ring-zinc-200 shadow
-                         hover:shadow-md transition-all duration-300 ease-out"
+                         hover:shadow-md transition-all duration-300 ease-out overflow-hidden"
             >
-              <Link href={s.href!} className="block">
-                <div className="relative w-full aspect-square">
-                  <Image
-                    src={s.image || FALLBACK_IMG}
-                    alt={s.name}
-                    fill
-                    sizes="(max-width:640px) 45vw, (max-width:768px) 48vw, (max-width:1024px) 32vw, (max-width:1280px) 24vw, 20vw"
-                    className="object-cover bg-[#F9F5F2]"
-                    onError={(e) => {
-                      const target = e.target as HTMLImageElement & { src: string };
-                      if (target?.src !== window.location.origin + FALLBACK_IMG) {
-                        target.src = FALLBACK_IMG;
-                      }
-                    }}
-                  />
-                </div>
-              </Link>
+              <Link href={s.href!} className="block relative w-full aspect-square">
+                {/* تصویر */}
+                <Image
+                  src={s.image || FALLBACK_IMG}
+                  alt={s.name}
+                  fill
+                  sizes="(max-width:640px) 45vw, (max-width:768px) 48vw, (max-width:1024px) 32vw, (max-width:1280px) 24vw, 20vw"
+                  className="object-cover bg-[#F9F5F2]"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement & { src: string };
+                    if (target?.src !== window.location.origin + FALLBACK_IMG) {
+                      target.src = FALLBACK_IMG;
+                    }
+                  }}
+                />
 
-                <div className="p-3 text-right">
-                  <Link
-                    href={s.href!}
-                    className="block h-10 sm:h-12 text-[12px] sm:text-[13px] leading-6 text-slate-800 line-clamp-2 hover:text-pink-700"
-                    title={s.name}
-                  >
+                {/* پوشش گرادیانی برای خوانایی متن */}
+                <div className="absolute inset-x-0 bottom-0 h-20 sm:h-24 bg-gradient-to-t from-black/65 via-black/35 to-transparent pointer-events-none" />
+
+                {/* متن داخل تصویر پایین */}
+                <div className="absolute inset-x-0 bottom-0 p-2.5 sm:p-3 text-white">
+                  <p className="text-xs sm:text-sm font-semibold leading-5 sm:leading-6 line-clamp-2">
                     {s.name}
-                  </Link>
+                  </p>
 
                   <div className="mt-1.5 sm:mt-2 flex items-center justify-between">
-                    <div className="text-[12px] sm:text-sm font-bold text-slate-900">
-                      {formatToman(Number(s.price ?? 0))}{" "}
-                      <span className="text-[11px] sm:text-xs font-medium text-slate-500">تومان</span>
-                    </div>
-                    <Link
-                      href={s.href!}
-                      className="h-8 sm:h-9 px-2.5 sm:px-3 rounded-lg bg-pink-600 text-white text-xs sm:text-sm font-bold grid place-items-center hover:bg-pink-700 transition-colors"
-                      aria-label={`مشاهده ${s.name}`}
+                    <span className="text-[11px] sm:text-xs font-bold">
+                      {formatToman(Number(s.price ?? 0))} <span className="opacity-85">تومان</span>
+                    </span>
+                    <span
+                      className="h-7 sm:h-8 px-2.5 sm:px-3 rounded-md bg-pink-600 text-white text-[11px] sm:text-xs font-bold grid place-items-center"
+                      aria-hidden
                     >
                       مشاهده
-                    </Link>
+                    </span>
                   </div>
                 </div>
+              </Link>
             </article>
           ))}
         </div>

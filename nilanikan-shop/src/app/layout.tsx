@@ -18,13 +18,20 @@ const vazirmatn = Vazirmatn({
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="fa" dir="rtl" suppressHydrationWarning>
-      <body className={`${vazirmatn.className} bg-white text-zinc-900`} suppressHydrationWarning>
+      <body
+        className={`${vazirmatn.className} bg-white text-zinc-900`}
+        suppressHydrationWarning
+      >
         <ClientProviders>
+          {/* هدر سایت */}
           <Header />
-          {/* CartSheet حذف شد */}
-          <div className="min-h-[calc(100vh-80px)]">{children}</div>
+
+          {/* محتوای اصلی */}
+          <main className="min-h-[calc(100vh-80px)]">{children}</main>
+
+          {/* فوتر */}
           <footer className="mt-16 border-t border-zinc-200">
-            <div className="mx-auto max-w-6xl px-4 py-8 text-xs text-zinc-600">
+            <div className="mx-auto max-w-6xl px-4 py-8 text-xs text-zinc-600 text-center">
               © {new Date().getFullYear()} نیلانیکان — تمامی حقوق محفوظ است.
             </div>
           </footer>

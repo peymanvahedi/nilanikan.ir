@@ -1,11 +1,36 @@
 @import "tailwindcss";
 
+/* Swiper */
+@import "swiper/css";
+@import "swiper/css/navigation";
+@import "swiper/css/pagination";
+
+/* دکمه‌های ناوبری عمومی برای همه اسلایدرها */
+.swiper-button-prev,
+.swiper-button-next {
+  top: 45% !important;
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s ease;
+}
+.swiper-button-prev:hover,
+.swiper-button-next:hover {
+  background: rgba(255, 255, 255, 1);
+}
+.swiper-button-prev:after,
+.swiper-button-next:after {
+  font-size: 14px !important;
+  color: #0f172a;
+}
+
 /* پس‌زمینه و رنگ متن را ثابت (سفید/تیره) کن */
 html, body {
   background: #ffffff !important;
   color: #0f172a !important;
 }
-
 /* هر تغییری از تم تاریک را غیرفعال کن */
 :root {
   --background: #ffffff !important;
@@ -32,4 +57,169 @@ html, body {
   animation-name: snow;
   animation-timing-function: linear;
   animation-iteration-count: infinite;
+}
+
+/* -------------------------------------------------------
+   استوری‌ها (CustomerCarousel) به‌صورت کارت شیک
+   - فقط با همین نام/فایل کار می‌کند: کلاس‌ها را در JSX اضافه کرده‌ایم:
+     stories-rail / customer-card / card-img / card-body / card-title / card-sub / card-chip
+   ------------------------------------------------------- */
+
+/* ریل استوری‌ها: فاصله پیش‌فرض + کاهش فقط در دسکتاپ */
+.stories-rail {
+  /* معادل: flex gap-4 overflow-x-auto scroll-smooth snap-x snap-mandatory px-1 pb-1
+     و مخفی‌کردن اسکرول‌بارها */
+  display: flex;
+  gap: 1rem; /* 16px */
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  scroll-snap-type: x mandatory;
+  padding-left: 0.25rem;
+  padding-right: 0.25rem;
+  padding-bottom: 0.25rem;
+  -ms-overflow-style: none; /* IE/Edge */
+  scrollbar-width: none;    /* Firefox */
+}
+.stories-rail::-webkit-scrollbar { display: none; }
+@media (min-width: 1024px) { /* lg */
+  .stories-rail { gap: 8px !important; }
+}
+@media (min-width: 1280px) { /* xl */
+  .stories-rail { gap: 4px !important; }
+}
+
+/* کارت استوری */
+.customer-card {
+  /* معادل: rounded-2xl bg-white ring-1 ring-slate-200/70 shadow-sm
+             hover:shadow-xl hover:-translate-y-1 transition-all duration-300 ease-out
+             overflow-hidden outline-none focus:ring-2 focus:ring-pink-500 */
+  background: #fff !important;
+  border-radius: 1rem !important; /* 16px */
+  box-shadow: 0 1px 2px rgba(2,6,23,0.06);
+  border: 1px solid rgba(226,232,240,0.7); /* slate-200/70 */
+  overflow: hidden;
+  transition: all 0.3s ease-out;
+  outline: none;
+  position: relative;
+  will-change: transform, box-shadow;
+}
+.customer-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 14px 28px rgba(2,6,23,0.14), 0 10px 10px rgba(2,6,23,0.10);
+}
+.customer-card:focus {
+  box-shadow:
+    0 0 0 3px rgba(236,72,153,0.3), /* حلقه فوکوس صورتی */
+    0 14px 28px rgba(2,6,23,0.14),
+    0 10px 10px rgba(2,6,23,0.10);
+}
+
+/* تصویر کارت + افکت هاور + گرادیان عمقی */
+.customer-card .card-img {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  /* aspect-ratio: 3 / 4;  اگر targetها قدیمی‌اند، از placeholder پدینگ استفاده می‌شود: */
+  aspect-ratio: 3 / 4;
+}
+.customer-card .card-img > img {
+  object-fit: cover;
+  width: 100%;
+  height: 100%;
+  transform: scale(1);
+  transition: transform 0.5s ease-out;
+}
+.customer-card:hover .card-img > img {
+  transform: scale(1.05);
+}
+.customer-card .card-img::after {
+  /* معادل: bg-gradient-to-t from-black/40 via-black/5 to-transparent */
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.4), rgba(0,0,0,0.05), rgba(0,0,0,0));
+  opacity: 0.7;
+  transition: opacity .3s ease;
+  pointer-events: none;
+}
+.customer-card:hover .card-img::after {
+  opacity: 0.6;
+}
+
+/* محتوای کارت */
+.customer-card .card-body {
+  background: #ffffff;
+  padding: 0.75rem 0.75rem; /* px-3 py-3 */
+}
+.customer-card .card-title {
+  font-size: 14px;
+  font-weight: 800; /* extrabold */
+  color: #0f172a;   /* slate-900/800 */
+  line-height: 1.25rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color .2s ease;
+}
+.customer-card:hover .card-title {
+  color: #db2777; /* pink-600 */
+}
+.customer-card .card-sub {
+  font-size: 12px;
+  color: #64748b; /* slate-500 */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.customer-card .card-chip {
+  font-size: 11px;
+  line-height: 1;
+  padding: 0.25rem 0.5rem;
+  border-radius: 9999px;
+  background: #f1f5f9; /* slate-100 */
+  color: #334155;      /* slate-700 */
+  transition: all .2s ease;
+}
+.customer-card:hover .card-chip {
+  background: #fdf2f8; /* pink-50 */
+  color: #be185d;      /* pink-700 */
+}
+
+/* اگر استایل‌های سراسری قبلی روی button مشکل ایجاد می‌کنند، این پنچ‌لاین‌ها کمک می‌کنند: */
+button.customer-card {
+  background: #ffffff !important;
+  border-radius: 1rem !important;
+}
+
+
+/* --- Hard reset: جلوگیری از دایره‌شدن و خط دور قدیمی روی کارت‌ها --- */
+.customer-card,
+button.customer-card {
+  background: #fff !important;
+  border: none !important;
+  border-radius: 16px !important;
+  box-shadow: 0 1px 2px rgba(2,6,23,0.06), 0 0 0 1px rgba(226,232,240,0.7) !important;
+}
+
+/* هر rounded-full داخل کارت را به گوشه گرد کارت تبدیل کن */
+.customer-card .rounded-full,
+.customer-card [class*="rounded-full"] {
+  border-radius: 16px !important;
+}
+
+/* هر نوع border/ring قدیمی داخل کارت را حذف کن */
+.customer-card .border,
+.customer-card [class*="border-"],
+.customer-card [class*="ring-"] {
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+/* تصویر و ظرف تصویر هرگز دایره نشوند */
+.customer-card .card-img,
+.customer-card .card-img img,
+.customer-card img {
+  border: none !important;
+  border-radius: 0 !important;
 }
