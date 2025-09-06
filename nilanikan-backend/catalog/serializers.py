@@ -32,6 +32,16 @@ def product_prices(obj: Product) -> tuple[Optional[float], Optional[float]]:
     return float(price) if price is not None else None, None
 
 
+def safe_file_url(f) -> str:
+    """برگشت url فقط اگر فایل واقعا وجود داشت"""
+    try:
+        if f and getattr(f, "name", ""):
+            return f.url
+    except Exception:
+        pass
+    return ""
+
+
 # ------------------------- Category -------------------------
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -51,30 +61,28 @@ class ProductImageSerializer(serializers.ModelSerializer):
 
     def get_image(self, obj):
         req = self.context.get("request")
-        url = getattr(getattr(obj, "image", None), "url", None)
-        return abs_url(req, url)
+        return abs_url(req, safe_file_url(getattr(obj, "image", None)))
 
 
 # ------------------------- Product (Full/Admin) -------------------------
 
 class ProductSerializer(serializers.ModelSerializer):
     image = serializers.SerializerMethodField()
-    gallery = ProductImageSerializer(many=True, read_only=True)  # 👈 اضافه شد
+    gallery = ProductImageSerializer(many=True, read_only=True)
 
     class Meta:
         model = Product
         fields = [
             "id", "name", "slug", "sku", "category",
             "price", "discount_price", "description",
-            "image", "gallery",   # 👈 گالری اضافه شد
+            "image", "gallery",
             "stock", "is_active", "created_at",
             "attributes", "size_chart",
         ]
 
     def get_image(self, obj):
         req = self.context.get("request")
-        url = getattr(getattr(obj, "image", None), "url", None)
-        return abs_url(req, url)
+        return abs_url(req, safe_file_url(getattr(obj, "image", None)))
 
 
 # ------------------------- Product (Frontend/List Item) -------------------------
@@ -96,8 +104,7 @@ class ProductItemSerializer(serializers.ModelSerializer):
 
     def get_imageUrl(self, obj):
         req = self.context.get("request")
-        url = getattr(getattr(obj, "image", None), "url", None)
-        return abs_url(req, url) or ""
+        return abs_url(req, safe_file_url(getattr(obj, "image", None))) or ""
 
     def get_price(self, obj):
         price, _compare = product_prices(obj)
@@ -133,8 +140,7 @@ class BundleImageSerializer(serializers.ModelSerializer):
 
     def get_image(self, obj):
         req = self.context.get("request")
-        url = getattr(getattr(obj, "image", None), "url", None)
-        return abs_url(req, url)
+        return abs_url(req, safe_file_url(getattr(obj, "image", None)))
 
 
 # ------------------------- Bundle -------------------------
@@ -154,8 +160,7 @@ class BundleSerializer(serializers.ModelSerializer):
 
     def get_image(self, obj):
         req = self.context.get("request")
-        url = getattr(getattr(obj, "image", None), "url", None)
-        return abs_url(req, url)
+        return abs_url(req, safe_file_url(getattr(obj, "image", None)))
 
 
 # ------------------------- Story -------------------------
@@ -169,5 +174,4 @@ class StorySerializer(serializers.ModelSerializer):
 
     def get_imageUrl(self, obj):
         req = self.context.get("request")
-        url = getattr(getattr(obj, "image", None), "url", None)
-        return abs_url(req, url) or ""
+        return abs_url(req, safe_file_url(getattr(obj, "image", None))) or ""

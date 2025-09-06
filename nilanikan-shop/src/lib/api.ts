@@ -161,7 +161,7 @@ async function request<T = any>(path: string, init: RequestInit = {}, opts?: Req
       next: { revalidate: 0, ...(opts?.init as any)?.next },
       ...init,
       headers,
-      credentials: init.credentials ?? "same-origin",
+      credentials: init.credentials ?? "include", // 🔑 تغییر اصلی
     });
 
   let res = await doFetch();
