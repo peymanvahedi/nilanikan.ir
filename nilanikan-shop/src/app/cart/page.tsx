@@ -1,4 +1,5 @@
 "use client";
+import SafeImg from "@/components/SafeImg";
 
 import Image from "next/image";
 import Link from "next/link";
@@ -210,7 +211,7 @@ export default function CartPage() {
         >
           {/* تصویر */}
           <div className="relative h-20 w-20 overflow-hidden rounded-xl ring-1 ring-zinc-100">
-            <img src={img} alt={name} className="h-full w-full object-cover" />
+            <SafeImg src={img} alt={name} className="h-full w-full object-cover" />
           </div>
 
           {/* نام و قیمت */}

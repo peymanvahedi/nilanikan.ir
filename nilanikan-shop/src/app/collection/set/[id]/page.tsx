@@ -1,4 +1,5 @@
 "use client";
+import SafeImg from "@/components/SafeImg";
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
@@ -120,7 +121,7 @@ export default function BundlePage() {
                   checked={selected.includes(p.id)}
                   onChange={() => toggleProduct(p.id)}
                 />
-                <img
+                <SafeImg
                   src={p?.image || (p?.images?.[0] ?? "https://picsum.photos/seed/product/200")}
                   alt={p?.name ?? "محصول"}
                   className="w-14 h-14 rounded-lg object-cover bg-white"
@@ -147,7 +148,7 @@ export default function BundlePage() {
               }`}
             >
               <div className="relative w-full aspect-square bg-white">
-                <img
+                <SafeImg
                   src={p?.image || (p?.images?.[0] ?? "https://picsum.photos/seed/product/400")}
                   alt={p?.name ?? "محصول"}
                   className="w-full h-full object-contain"

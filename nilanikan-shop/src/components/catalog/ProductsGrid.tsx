@@ -1,4 +1,5 @@
 "use client";
+import SafeImg from "@/components/SafeImg";
 
 type Item = {
   id: string | number;
@@ -61,7 +62,7 @@ export function ProductsGrid({
             <a href={`/product/${p.slug}`} className="block">
               <div className="aspect-[3/4] bg-gray-50">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <SafeImg
                   src={p.image || "/placeholder.png"}
                   alt={p.title}
                   className="w-full h-full object-cover"

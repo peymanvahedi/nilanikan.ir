@@ -1,4 +1,5 @@
 "use client";
+import SafeImg from "@/components/SafeImg";
 
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Navigation } from "swiper/modules";
@@ -42,7 +43,7 @@ export default function CardSlider({
           <SwiperSlide key={it.id}>
             <Link href={it.link || "#"} className="block group">
               <div className="aspect-square rounded-xl overflow-hidden bg-gray-50">
-                <img
+                <SafeImg
                   src={it.imageUrl}
                   alt={it.title}
                   className="w-full h-full object-cover group-hover:scale-105 transition"

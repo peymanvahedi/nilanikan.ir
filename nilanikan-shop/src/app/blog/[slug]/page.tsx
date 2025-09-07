@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import SafeImg from "@/components/SafeImg";
 
 const posts = [
   {
@@ -46,7 +47,7 @@ export default async function BlogPostPage({
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8">
-      <img
+      <SafeImg
         src={post.cover}
         alt={post.title}
         className="w-full h-64 md:h-96 object-cover rounded-2xl mb-6"

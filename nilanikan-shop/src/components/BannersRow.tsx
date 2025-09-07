@@ -1,4 +1,5 @@
 "use client";
+import SafeImg from "@/components/SafeImg";
 
 import Link from "next/link";
 import type { BannerItem } from "@/types/home";
@@ -9,7 +10,7 @@ export default function BannersRow({ banners }: { banners: BannerItem[] }) {
       {(banners ?? []).slice(0, 2).map((b) => {
         const content = (
           <div className="banner-card block">
-            <img
+            <SafeImg
               src={b.imageUrl}
               alt={b.title}
               className="w-full h-48 md:h-60 object-cover rounded-2xl"

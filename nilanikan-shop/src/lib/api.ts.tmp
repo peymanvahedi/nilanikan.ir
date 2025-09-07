@@ -1,6 +1,6 @@
 // src/lib/api.ts
 /* ===================== BASE ===================== */
-const API_PREFIX = "";
+const API_PREFIX = "/api";
 const MEDIA_PREFIX = (process.env.NEXT_PUBLIC_MEDIA_PREFIX ?? "/media/").replace(/\/?$/, "/");
 const MEDIA_ORIGIN = (process.env.NEXT_PUBLIC_MEDIA_BASE_URL ??
   process.env.NEXT_PUBLIC_API_BASE_URL ??
@@ -61,12 +61,7 @@ export const endpoints = {
 /* ===================== Helpers ===================== */
 export function toApi(path: string) {
   if (/^https?:\/\//i.test(path)) return path;
-  return `${API_PREFIX}/${(() => {  const raw = path.replace(/^\/+/, "");
-  const qIndex = raw.indexOf("?");
-  const p = qIndex === -1 ? raw : raw.slice(0, qIndex);
-  const q = qIndex === -1 ? "" : raw.slice(qIndex);
-  const fixed = p.startsWith("api/") && !p.endsWith("/") ? (p + "/") : p;
-  return fixed + q;})()}`;
+  return `${API_PREFIX}/${path.replace(/^\/+/, "")}`;
 }
 
 export function absolutizeMedia(url?: string | null): string {

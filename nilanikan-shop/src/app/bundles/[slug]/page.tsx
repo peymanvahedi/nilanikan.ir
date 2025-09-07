@@ -256,11 +256,11 @@ export default function BundlePage() {
     };
   }, [bundle?.id, bundle?.slug, bundle?.category, bundle?.category_slug, bundlesEndpoint]);
 
-  const descriptionHtml = useMemo(() => {
+  const descriptionHtml = (() => {
     const raw = bundle?.description ?? "";
     const looksLikeHtml = /<\w+[^>]*>/.test(raw);
     return looksLikeHtml ? raw : toDescriptionHtml(raw);
-  }, [bundle?.description]);
+  })();
 
   if (loading) {
     return (
@@ -291,23 +291,25 @@ export default function BundlePage() {
   const discount = hasDiscount ? Math.round((1 - finalPrice / basePrice) * 100) : 0;
 
   // محاسبه جمع آیتم‌ها (اگر API compare_at_price ندهد)
-  const itemsTotal = useMemo(() => {
+  const itemsTotal = (() => {
     const arr = bundle.items ?? [];
     return arr.reduce((sum, it) => {
       const p = Number(it.product?.discount_price ?? it.product?.price ?? 0);
       const q = Number(it.quantity ?? 1);
       return sum + p * q;
     }, 0);
-  }, [bundle.items]);
+  })();
 
-  const features = useMemo<string[]>(() => {
+  const features = (() => {
+
     const out: string[] = [];
     if (Array.isArray(bundle.items)) {
       out.push(`تعداد آیتم‌ها: ${bundle.items.length}`);
     }
     if (hasDiscount) out.push(`صرفه‌جویی: ${toFa(basePrice - finalPrice)} تومان (${toFa(discount)}٪)`);
     return out;
-  }, [bundle.items, hasDiscount, basePrice, finalPrice, discount]);
+  
+})();
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-8" dir="rtl">

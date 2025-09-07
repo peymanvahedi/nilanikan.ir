@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { get, endpoints } from "@/lib/api";
+import SafeImg from "@/components/SafeImg";
 
 type Category = {
   id: number;
@@ -36,7 +37,7 @@ export default async function CategoriesPage() {
               className="block border rounded-2xl overflow-hidden shadow hover:shadow-lg transition bg-white"
             >
               <div className="aspect-square overflow-hidden">
-                <img
+                <SafeImg
                   src={resolveImage(c.image, c.slug || c.name)}
                   alt={c.name}
                   className="w-full h-full object-cover"

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import SafeImg from "@/components/SafeImg";
 
 const posts = [
   {
@@ -37,7 +38,7 @@ export default function BlogPage() {
             className="block border rounded-2xl overflow-hidden bg-white shadow hover:shadow-lg transition"
           >
             <div className="aspect-video overflow-hidden">
-              <img src={post.cover} alt={post.title} className="w-full h-full object-cover" />
+              <SafeImg src={post.cover} alt={post.title} className="w-full h-full object-cover" />
             </div>
             <div className="p-4">
               <div className="text-xs text-zinc-500 mb-2">{post.date}</div>

@@ -1,3 +1,4 @@
+import dynamic from "next/dynamic";
 // src/app/page.tsx
 export const dynamic = "force-dynamic";
 

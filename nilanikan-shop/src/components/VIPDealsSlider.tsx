@@ -1,4 +1,5 @@
 "use client";
+import SafeImg from "@/components/SafeImg";
 
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Navigation } from "swiper/modules";
@@ -42,7 +43,7 @@ function ProductCard({ p }: { p: ProductItem }) {
   return (
     <Link href={p.link || "#"} className="block group">
       <div className="aspect-[3/4] rounded-xl overflow-hidden bg-gray-50">
-        <img
+        <SafeImg
           src={p.imageUrl}
           alt={p.title}
           className="w-full h-full object-cover group-hover:scale-105 transition"
