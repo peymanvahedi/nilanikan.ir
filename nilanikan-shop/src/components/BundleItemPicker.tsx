@@ -5,6 +5,9 @@ import { useMemo, useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { addToCart } from "@/lib/cart";
 
+// ——— انواع مشترک با Tabs ———
+type Attribute = { name?: string | null; value?: string | null };
+
 type BundleItem = {
   productId: number;
   name: string;
@@ -28,11 +31,18 @@ type Props = {
   discountValue?: number | null;
   items: BundleItem[];
   onSummaryChange?: (summary: Summary) => void;
+
+  /** انتخاب‌های تب پایین: productId => لیست ویژگی‌های انتخاب‌شده */
+  externalSelectedAttributes?: Record<number, Attribute[]>;
 };
 
 function toFa(n: number) {
   try { return n.toLocaleString("fa-IR"); } catch { return String(n); }
 }
+
+/** ساخت لیبل خوانا برای نمایش ویژگی‌ها */
+const attrLabel = (a: { name?: string | null; value?: string | null }) =>
+  [a?.name, a?.value].filter(Boolean).join(": ");
 
 export default function BundleItemPicker({
   bundleId,
@@ -41,6 +51,7 @@ export default function BundleItemPicker({
   discountValue,
   items,
   onSummaryChange,
+  externalSelectedAttributes,
 }: Props) {
   // وضعیت انتخاب و تعداد
   const [selected, setSelected] = useState<Record<number, { checked: boolean; qty: number }>>(() => {
@@ -52,21 +63,28 @@ export default function BundleItemPicker({
     return init;
   });
 
-  // کال‌بک پایدار در ref برای جلوگیری از لوپ
+  // کال‌بک پایدار برای Summary
   const callbackRef = useRef<Props["onSummaryChange"]>();
   useEffect(() => { callbackRef.current = onSummaryChange; }, [onSummaryChange]);
 
-  // آیتم‌های آماده برای سبد
+  // آیتم‌های آماده برای سبد (ویژگی‌ها هم ضمیمه می‌شود)
   const selectedForCart = useMemo(() => {
-    const out: { id: number; name: string; price: number; image?: string | null; qty: number }[] = [];
+    const out: { id: number; name: string; price: number; image?: string | null; qty: number; attributes?: Attribute[] }[] = [];
     for (const it of items) {
       const s = selected[it.productId];
       if (!s?.checked) continue;
       const qty = Math.max(1, Number(s.qty || 1));
-      out.push({ id: it.productId, name: it.name, price: it.price, image: it.image ?? null, qty });
+      out.push({
+        id: it.productId,
+        name: it.name,
+        price: it.price,
+        image: it.image ?? null,
+        qty,
+        attributes: externalSelectedAttributes?.[it.productId] || [],
+      });
     }
     return out;
-  }, [items, selected]);
+  }, [items, selected, externalSelectedAttributes]);
 
   // محاسبات مبلغ
   const subtotal = useMemo(() => selectedForCart.reduce((sum, it) => sum + it.price * it.qty, 0), [selectedForCart]);
@@ -119,14 +137,25 @@ export default function BundleItemPicker({
   const addSelectedToCart = async () => {
     if (selectedForCart.length === 0) return;
     for (const it of selectedForCart) {
-      await addToCart({ id: it.id, name: it.name, price: it.price, image: it.image ?? null }, it.qty);
+      // ⬇️ attributes داخل آبجکت محصول پاس داده می‌شود
+      await addToCart(
+        {
+          id: it.id,
+          name: it.name,
+          price: it.price,
+          image: it.image ?? null,
+          // @ts-expect-error: extend cart item with attributes (اگر تایپ cart آپدیت شد، این خط را بردار)
+          attributes: it.attributes || [],
+        },
+        it.qty
+      );
     }
     alert("به سبد اضافه شد.");
   };
 
   return (
     <>
-      {/* کانتینر اصلی */}
+      {/* کانتینر اصلی انتخاب آیتم‌ها */}
       <div className="rounded-2xl border border-zinc-200 bg-white p-4 overflow-hidden w-full">
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-base md:text-lg font-extrabold text-zinc-900">آیتم‌ها را انتخاب کن</h3>
@@ -142,6 +171,9 @@ export default function BundleItemPicker({
         <div className="grid grid-cols-1 gap-3 min-w-0">
           {items.map((it) => {
             const state = selected[it.productId] || { checked: true, qty: 1 };
+            const attrs = externalSelectedAttributes?.[it.productId] || [];
+            const hasAttrs = attrs.length > 0;
+
             return (
               <div
                 key={it.productId}
@@ -161,12 +193,23 @@ export default function BundleItemPicker({
                   <Image src={it.image || "/placeholder.svg"} alt={it.name} fill className="object-cover" />
                 </div>
 
-                {/* نام + قیمت واحد */}
+                {/* نام + قیمت واحد + خلاصه ویژگی‌ها */}
                 <div className="min-w-0">
                   <div className="text-sm font-bold text-zinc-900 line-clamp-2">{it.name}</div>
                   <div className="text-xs text-zinc-500 mt-0.5">
                     {toFa(it.price)} <span>تومان</span> / واحد
                   </div>
+
+                  {/* خلاصه ویژگی‌های انتخابی (از تب پایین) */}
+                  {hasAttrs && (
+                    <div className="mt-1 text-[11px] leading-5 text-zinc-600">
+                      <span className="font-bold text-zinc-700">ویژگی‌ها: </span>
+                      {attrs
+                        .map((a) => attrLabel(a))
+                        .filter((s) => s && s.trim().length > 0)
+                        .join("، ")}
+                    </div>
+                  )}
                 </div>
 
                 {/* کنترل تعداد (عمودی) */}

@@ -1,7 +1,7 @@
 // src/components/BundleItemsTabs.tsx
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 
 type Attribute = { name?: string | null; value?: string | null };
@@ -28,7 +28,13 @@ function toFaNum(v: any) {
   }
 }
 
-export default function BundleItemsTabs({ products }: { products: ProductLike[] }) {
+type Props = {
+  products: ProductLike[];
+  /** اختیاری: هر بار انتخاب ویژگی‌های یک محصول تغییر کند، به والد اطلاع می‌دهد */
+  onAttributesChange?: (productId: number, selected: Attribute[]) => void;
+};
+
+export default function BundleItemsTabs({ products, onAttributesChange }: Props) {
   const normalized = useMemo(() => {
     return (products || []).map((p, i) => {
       const name = p.title || p.name || `آیتم ${i + 1}`;
@@ -54,9 +60,40 @@ export default function BundleItemsTabs({ products }: { products: ProductLike[] 
   const [activeProduct, setActiveProduct] = useState(0);
   const [activeTab, setActiveTab] = useState<"desc" | "attrs" | "size">("desc");
 
-  if (!normalized.length) return null;
+  // selectedAttrs: نگاشت ایندکس محصول => نگاشت ایندکس ویژگی => انتخاب شده/نشده
+  const [selectedAttrs, setSelectedAttrs] = useState<
+    Record<number, Record<number, boolean>>
+  >({});
 
+  // اطمینان از داشتن شیء خالی برای محصول فعال
+  useEffect(() => {
+    setSelectedAttrs((prev) => {
+      if (prev[activeProduct]) return prev;
+      return { ...prev, [activeProduct]: {} };
+    });
+  }, [activeProduct]);
+
+  if (!normalized.length) return null;
   const current = normalized[Math.min(activeProduct, normalized.length - 1)];
+
+  const toggleAttr = (prodIdx: number, attrIdx: number) => {
+    setSelectedAttrs((prev) => {
+      const productMap = { ...(prev[prodIdx] || {}) };
+      productMap[attrIdx] = !productMap[attrIdx];
+      const next = { ...prev, [prodIdx]: productMap };
+
+      // کال‌بک به والد (اختیاری)
+      if (onAttributesChange) {
+        const selected: Attribute[] =
+          (current.attributes || []).filter((_, i) => productMap[i]);
+        onAttributesChange(current.id, selected);
+      }
+      return next;
+    });
+  };
+
+  const isChecked = (prodIdx: number, attrIdx: number) =>
+    !!selectedAttrs?.[prodIdx]?.[attrIdx];
 
   return (
     <section className="mt-10" dir="rtl">
@@ -143,17 +180,28 @@ export default function BundleItemsTabs({ products }: { products: ProductLike[] 
         {activeTab === "attrs" && (
           <div>
             {current.attributes?.length ? (
-              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {current.attributes.map((a, idx) => (
-                  <li
-                    key={idx}
-                    className="flex items-center justify-between rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs"
-                  >
-                    <span className="text-zinc-600">{a?.name || "—"}</span>
-                    <span className="font-bold text-zinc-900">{a?.value || "—"}</span>
-                  </li>
-                ))}
-              </ul>
+              <fieldset className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {current.attributes.map((a, idx) => {
+                  const label =
+                    (a?.name ? String(a.name) : "—") +
+                    (a?.value ? `: ${a.value}` : "");
+                  return (
+                    <label
+                      key={idx}
+                      className="flex items-center justify-between rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs cursor-pointer"
+                    >
+                      <span className="text-zinc-700">{label || "—"}</span>
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 accent-pink-600"
+                        checked={isChecked(activeProduct, idx)}
+                        onChange={() => toggleAttr(activeProduct, idx)}
+                        aria-label={label || `attr-${idx}`}
+                      />
+                    </label>
+                  );
+                })}
+              </fieldset>
             ) : (
               <p className="text-sm text-zinc-600">
                 ویژگی‌ای برای این آیتم ثبت نشده است.

@@ -9,6 +9,7 @@ from .models import (
     Bundle,
     BundleImage,
     AttributeValue,
+    ProductVariant,  # ← اضافه شد
 )
 from stories.models import Story
 
@@ -78,12 +79,22 @@ class ProductImageSerializer(serializers.ModelSerializer):
         return abs_url(req, safe_file_url(getattr(obj, "image", None)))
 
 
+# ------------------------- Product Variants -------------------------
+class ProductVariantSerializer(serializers.ModelSerializer):
+    size = AttributeValueSerializer()
+
+    class Meta:
+        model = ProductVariant
+        fields = ["id", "size", "price", "stock"]
+
+
 # ------------------------- Product (Full/Admin) -------------------------
 class ProductSerializer(serializers.ModelSerializer):
     image = serializers.SerializerMethodField()
     gallery = ProductImageSerializer(many=True, read_only=True)
     is_recommended = serializers.BooleanField(read_only=False)
     attributes = AttributeValueSerializer(many=True, read_only=True)
+    variants = ProductVariantSerializer(many=True, read_only=True)  # ← اضافه شد
 
     class Meta:
         model = Product
@@ -93,6 +104,7 @@ class ProductSerializer(serializers.ModelSerializer):
             "image", "gallery",
             "stock", "is_active", "is_recommended", "created_at",
             "attributes", "size_chart",
+            "variants",  # ← اضافه شد
         ]
 
     def get_image(self, obj):

@@ -174,3 +174,32 @@ button.customer-card {
 .customer-card .card-img,
 .customer-card .card-img img,
 .customer-card img { border: none !important; border-radius: 0 !important; }
+
+
+html, body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+
+.guide-button {
+  position: fixed;
+  right: 20px;        /* فاصله از سمت راست */
+  bottom: 20px;       /* فاصله از پایین صفحه */
+  z-index: 9999;      /* قرار دادن در بالاترین لایه */
+  display: grid;
+  place-items: center;
+  width: 50px;        /* اندازه دکمه */
+  height: 50px;       /* اندازه دکمه */
+  border-radius: 50%; /* گرد کردن دکمه */
+  background-color: #db2777; /* رنگ پس‌زمینه */
+  color: white;       /* رنگ متن */
+  font-size: 24px;    /* اندازه آیکون */
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2); /* سایه */
+  transition: background-color 0.3s ease;
+}
+
+/* تغییر رنگ هنگام هاور */
+.guide-button:hover {
+  background-color: #be185d;
+}

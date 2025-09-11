@@ -10,7 +10,7 @@ from catalog.views import (
     CategoryViewSet,
     ProductViewSet,
     BundleViewSet,
-    home_view,   # فقط home_view را می‌خواهیم
+    home_view,
 )
 from orders.views import CartViewSet, OrderViewSet
 from coupons.views import CouponViewSet
@@ -49,6 +49,9 @@ urlpatterns = [
 
     # استوری‌ها
     path("api/", include("stories.urls")),
+
+    # ✅ دیدگاه‌ها
+    path("api/", include("reviews.urls")),
 ]
 
 if settings.DEBUG:

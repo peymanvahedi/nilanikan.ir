@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     "support",
     "banners",
     "stories",
+    "reviews",
 ]
 
 # ---------- Middleware ----------

@@ -2,7 +2,6 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import AddToCartButton from "@/components/AddToCartButton";
@@ -12,20 +11,23 @@ import AttributePicker, {
   SelectedAttrs,
   AttributeValue as AV,
 } from "@/components/AttributePicker";
+import ProductSizeNote from "@/components/ProductSizeNote";
+import ProductReviewSummary from "@/components/ProductReviewSummary";
+import CardSlider from "@/components/CardSlider"; // ⭐️ برای کاروسل «محصولات مشابه»
 
 // ---------- Types ----------
-type AttributeValue = {
-  id: number;
-  attribute: string;
-  value: string;
-  slug: string;
-  color_code?: string | null;
-};
-
 type SizeChart = {
   headers: string[];
   rows: Array<Array<string | number>>;
   note?: string;
+};
+
+// ⭐️ Variant برای قیمت سایز
+type Variant = {
+  id: number;
+  size: AV;
+  price: number;
+  stock: number;
 };
 
 type Product = {
@@ -39,13 +41,15 @@ type Product = {
   image?: string | null;
   images?: string[];
   gallery?: { id: number; image: string; alt?: string | null }[];
-  attributes?: AttributeValue[] | Record<string, any> | null;
+  attributes?: AV[] | Record<string, any> | null;
   size_chart?: SizeChart | null;
   category?: string | number | null;
   category_slug?: string | null;
   categorySlug?: string | null;
   category_name?: string | null;
   categoryName?: string | null;
+  variants?: Variant[] | null; // ← اضافه
+  stock?: number | null;
   [k: string]: any;
 };
 
@@ -54,10 +58,9 @@ const listify = <T = any,>(x: any): T[] =>
   Array.isArray(x) ? x : Array.isArray(x?.results) ? x.results : [];
 
 async function fetchProductAny(key: string) {
-  const direct = await get<any>(
-    `${endpoints.products}${encodeURIComponent(key)}/`,
-    { throwOnHTTP: false }
-  );
+  const direct = await get<any>(`${endpoints.products}${encodeURIComponent(key)}/`, {
+    throwOnHTTP: false,
+  });
   if (direct && !direct?.detail) return direct;
 
   let resp = await get<any>(`${endpoints.products}?slug=${encodeURIComponent(key)}`, {
@@ -129,12 +132,20 @@ function MobileGallery({ images, alt }: { images: string[]; alt: string }) {
 }
 
 function DesktopGallery({
-  images, alt, active, setActive,
-}: { images: string[]; alt: string; active: number; setActive: (i: number) => void }) {
+  images,
+  alt,
+  active,
+  setActive,
+}: {
+  images: string[];
+  alt: string;
+  active: number;
+  setActive: (i: number) => void;
+}) {
   const main = images[active] || images[0] || "/placeholder.svg";
   return (
     <div className="hidden lg:grid grid-cols-[80px_1fr] gap-4">
-      <div className="flex flex-col gap-2 overflow-y-auto max-h=[520px] pr-1">
+      <div className="flex flex-col gap-2 overflow-y-auto max-h-[520px] pr-1">
         {images.map((src, i) => (
           <button
             key={i}
@@ -150,11 +161,28 @@ function DesktopGallery({
           </button>
         ))}
       </div>
-      <div className="relative aspect-[4/5] w-full rounded-2xl ring-1 ring-zinc-200 overflow-hidden">
-        <Image src={main || "/placeholder.svg"} alt={alt} fill className="object-cover" sizes="420px" priority />
+
+      {/* ظرف اصلی با ارتفاع مشخص */}
+      <div className="relative w-full h-[520px] rounded-2xl ring-1 ring-zinc-200 overflow-hidden">
+        <Image src={main || "/placeholder.svg"} alt={alt} fill className="object-cover" sizes="520px" priority />
       </div>
     </div>
   );
+}
+
+// ⭐️ یابندهٔ سایز از انتخاب‌ها
+function getPickedSize(picked: SelectedAttrs | undefined | null): AV | null {
+  if (!picked) return null;
+  const keys = Object.keys(picked);
+  const pref = ["size", "سایز", "اندازه", "maat", "尺码"];
+  for (const k of pref) {
+    const hit = keys.find((x) => x.toLowerCase() === k.toLowerCase());
+    if (hit && picked[hit]) return picked[hit]!;
+  }
+  for (const k of keys) {
+    if (picked[k]) return picked[k]!;
+  }
+  return null;
 }
 
 // ---------- Page ----------
@@ -170,6 +198,10 @@ export default function ProductPage() {
 
   // انتخاب ویژگی‌ها
   const [picked, setPicked] = useState<SelectedAttrs>({});
+
+  // ⭐️ state برای محصولات مشابه
+  const [related, setRelated] = useState<any[]>([]);
+  const [relLoading, setRelLoading] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -194,30 +226,12 @@ export default function ProductPage() {
         if (alive) setLoading(false);
       }
     })();
-    return () => { alive = false; };
+    return () => {
+      alive = false;
+    };
   }, [slug, router]);
 
-  // یکنواخت‌سازی برای نمایش در تب‌ها
-  const featuresForTabs = useMemo(() => {
-    const a = product?.attributes;
-    if (Array.isArray(a)) {
-      return a.map(x => ({
-        label: x.attribute,
-        value: x.value,
-        color_code: x.color_code ?? null,
-      }));
-    }
-    if (a && typeof a === "object") {
-      return Object.entries(a).map(([k, v]) => ({
-        label: k,
-        value: Array.isArray(v) ? v.join("، ") : String(v),
-        color_code: null,
-      }));
-    }
-    return [] as { label: string; value: string; color_code?: string | null }[];
-  }, [product?.attributes]);
-
-  // خلاصهٔ انتخاب‌شده‌ها برای چسباندن به نام محصول
+  // خلاصهٔ انتخاب‌شده‌ها
   const pickedSummary = useMemo(() => {
     const entries = Object.entries(picked).filter(([, v]) => !!v);
     if (!entries.length) return "";
@@ -227,22 +241,177 @@ export default function ProductPage() {
   // آیا همهٔ گروه‌های ویژگی انتخاب شده‌اند؟
   const allAttrsChosen = useMemo(() => {
     const a = product?.attributes;
-    if (!Array.isArray(a) || a.length === 0) return true; // ویژگی الزامی نداریم
-    const reqNames = Array.from(new Set(a.map((x: AV) => x.attribute || "ویژگی")));
+    if (!Array.isArray(a) || a.length === 0) return true;
+    const reqNames = Array.from(new Set((a as AV[]).map((x) => x.attribute || "ویژگی")));
     return reqNames.every((name) => !!picked[name]);
   }, [product?.attributes, picked]);
 
+  // HTML آمادهٔ توضیحات محصول
   const descriptionHtml = useMemo(() => {
     const raw = product?.description ?? "";
     const looksLikeHtml = /<\w+[^>]*>/.test(raw);
     return looksLikeHtml ? raw : toDescriptionHtml(raw);
   }, [product?.description]);
 
+  // شناسایی وجود سایز/رنگ
+  const { hasSize, hasColor, sizePicked, colorPicked } = useMemo(() => {
+    const attrs = Array.isArray(product?.attributes) ? (product!.attributes as AV[]) : [];
+    const names = attrs.map((x) => (x.attribute || "").toLowerCase());
+    const sizeKeys = ["size", "سایز", "اندازه", "maat", "尺码"].map((s) => s.toLowerCase());
+    const colorKeys = ["color", "رنگ", "colour", "لون"].map((s) => s.toLowerCase());
+    const hasSize = names.some((n) => sizeKeys.includes(n));
+    const hasColor = names.some((n) => colorKeys.includes(n));
+
+    const pkeys = Object.keys(picked || {}).map((k) => k.toLowerCase());
+    const sizePicked = pkeys.some((k) => sizeKeys.includes(k));
+    const colorPicked = pkeys.some((k) => colorKeys.includes(k));
+
+    return { hasSize, hasColor, sizePicked, colorPicked };
+  }, [product?.attributes, picked]);
+
+  // ⭐️ Variant انتخاب‌شده بر اساس سایز
+  const selectedVariant: Variant | null = useMemo(() => {
+    if (!product?.variants || product.variants.length === 0) return null;
+    const ps = getPickedSize(picked);
+    if (!ps) return null;
+    return product.variants.find((v) => v.size?.id === ps.id) || null;
+  }, [product?.variants, picked]);
+
+  // ⭐️ قیمت نهایی برای نمایش (اولویت با Variant)
+  const displayPrice = useMemo(() => {
+    if (selectedVariant) return Number(selectedVariant.price);
+    return Number(product?.discount_price ?? product?.price ?? 0);
+  }, [selectedVariant, product?.discount_price, product?.price]);
+
+  // ⭐️ وضعیت موجودی Variant (اگر نداشتیم، true)
+  const variantInStock = selectedVariant ? (selectedVariant.stock ?? 0) > 0 : true;
+
+  // ⭐️ تعداد موجودی برای نمایش (بعد از کامل شدن انتخاب‌ها)
+  const stockLeft = useMemo(() => {
+    if (selectedVariant) return Number(selectedVariant.stock ?? 0);
+    return product?.stock != null ? Number(product.stock) : null;
+  }, [selectedVariant, product?.stock]);
+
+  // شرط نمایش موجودی: فقط وقتی همهٔ گروه‌های لازم انتخاب شدند
+  const canShowStock =
+    (hasSize ? sizePicked : true) && (hasColor ? colorPicked : true) && stockLeft != null;
+
+  // پیام راهنما: وقتی یکی انتخاب شد و دیگری مانده
+  const guidanceMessage = useMemo(() => {
+    if (hasSize && sizePicked && hasColor && !colorPicked) return "لطفاً رنگ را انتخاب کنید.";
+    if (hasColor && colorPicked && hasSize && !sizePicked) return "لطفاً سایز را انتخاب کنید.";
+    return null;
+  }, [hasSize, hasColor, sizePicked, colorPicked]);
+
+
+// لیست ویژگی‌ها برای تب (سایز و رنگ جلوتر نمایش داده شوند)
+const featureLines = useMemo(() => {
+  const attrs = Array.isArray(product?.attributes) ? (product!.attributes as AV[]) : [];
+  if (!attrs.length) return [] as string[];
+
+  // ساخت "نام: مقدار"
+  const lines = attrs
+    .map((a) => {
+      const label = String(a.attribute || "").trim();
+      const value = String(a.value || "").trim();
+      if (!label && !value) return null;
+      return `${label}${value ? `: ${value}` : ""}`;
+    })
+    .filter(Boolean) as string[];
+
+  // سایز/رنگ جلوتر بیایند
+  const sizeKeys = ["size", "سایز", "اندازه", "maat", "尺码"].map((s) => s.toLowerCase());
+  const colorKeys = ["color", "رنگ", "colour", "لون"].map((s) => s.toLowerCase());
+
+  const score = (s: string) => {
+    const low = s.toLowerCase();
+    if (sizeKeys.some((k) => low.startsWith(k))) return 0;
+    if (colorKeys.some((k) => low.startsWith(k))) return 1;
+    return 2;
+  };
+
+  return [...lines].sort((a, b) => score(a) - score(b));
+}, [product?.attributes]);
+
+
+  // ---------- Related products ----------
+  // مپ برای کارت محصول (استفاده در CardSlider)
+  function toProductCardItem(r: any) {
+    const title =
+      String(
+        r.title ??
+          r.name ??
+          r.product_name ??
+          r.productTitle ??
+          r.label ??
+          r.caption ??
+          r._raw?.title ??
+          r._raw?.name ??
+          r._raw?.name_fa ??
+          r._raw?.title_fa ??
+          `محصول ${r?.id ?? ""}`
+      ) || "محصول";
+    const imageUrl =
+      r.imageUrl || r.image || r.thumbnail || r.main_image || r.cover || r.photo?.url || r.images?.[0] || "";
+    const slug = r.slug ?? r.handle ?? r.seoSlug ?? r._raw?.slug;
+    const href = slug ? `/product/${slug}` : undefined;
+    return { ...r, title, name: title, imageUrl: String(imageUrl || ""), href, slug };
+  }
+
+  useEffect(() => {
+    if (!product) return;
+    let alive = true;
+    (async () => {
+      try {
+        setRelLoading(true);
+        // استراتژی 1: بر اساس دسته‌بندی
+        const cat =
+          product.category_slug ||
+          product.categorySlug ||
+          product.category ||
+          product.categoryName ||
+          product.category_name;
+        const q1 = cat
+          ? `${endpoints.products}?limit=20&category=${encodeURIComponent(String(cat))}`
+          : `${endpoints.products}?limit=20`;
+
+        let raw = await get<any>(q1, { throwOnHTTP: false, fallback: { results: [] } });
+        let arr = listify(raw).filter((p: any) => String(p.id) !== String(product.id));
+
+        // استراتژی 2 (fallback): سرچ نام
+        if (arr.length < 6 && product.name) {
+          const q2 = `${endpoints.products}?search=${encodeURIComponent(product.name.split(" ")[0] || "")}`;
+          const raw2 = await get<any>(q2, { throwOnHTTP: false, fallback: { results: [] } });
+          const arr2 = listify(raw2).filter(
+            (p: any) => String(p.id) !== String(product.id) && !arr.find((x: any) => x.id === p.id)
+          );
+          arr = [...arr, ...arr2];
+        }
+
+        const items = arr.slice(0, 12).map(toProductCardItem);
+        if (alive) setRelated(items);
+      } finally {
+        if (alive) setRelLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [product]);
+
   if (loading) {
-    return <main className="mx-auto max-w-7xl px-4 py-8" dir="rtl">در حال بارگذاری…</main>;
+    return (
+      <main className="mx-auto max-w-7xl px-4 py-8" dir="rtl">
+        در حال بارگذاری…
+      </main>
+    );
   }
   if (err || !product) {
-    return <main className="mx-auto max-w-7xl px-4 py-8" dir="rtl">خطا: {err || "محصول پیدا نشد."}</main>;
+    return (
+      <main className="mx-auto max-w-7xl px-4 py-8" dir="rtl">
+        خطا: {err || "محصول پیدا نشد."}
+      </main>
+    );
   }
 
   const galleryRaw: string[] = [
@@ -270,16 +439,25 @@ export default function ProductPage() {
       </nav>
 
       {/* 3 columns */}
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[420px_1fr_360px] lg:items-start">
+      <div className="grid grid-cols-1 gap-8 lg:[grid-template-columns:420px_1fr_360px] lg:items-start">
         {/* Gallery */}
         <section className="lg:col-start-1 lg:col-end-2">
           <MobileGallery images={images} alt={product.name} />
           <DesktopGallery images={images} alt={product.name} active={active} setActive={setActive} />
+
+          <ProductReviewSummary
+            productId={product.id}
+            productSlug={product.slug || String(product.id)}
+            className="mt-3"
+          />
         </section>
 
         {/* Details */}
         <section className="lg:col-start-2 lg:col-end-3">
           <h1 className="text-lg md:text-xl lg:text-2xl font-bold text-zinc-900">{product.name}</h1>
+
+          <ProductSizeNote />
+
           {product.brand && <div className="mt-2 text-sm text-zinc-500">{product.brand}</div>}
         </section>
 
@@ -295,35 +473,62 @@ export default function ProductPage() {
                   <del className="text-sm text-zinc-400">{toFa(Number(product.price))}</del>
                 </div>
               )}
-              <div className="text-2xl font-extrabold text-pink-600">
-                {toFa(Number(product.discount_price ?? product.price))} <span className="text-sm">تومان</span>
+              <div className="text-2xl font-extrabولد text-pink-600">
+                {toFa(Number(displayPrice))} <span className="text-sm">تومان</span>
               </div>
             </div>
 
             {/* انتخاب ویژگی‌ها */}
             {Array.isArray(product.attributes) && product.attributes.length > 0 && (
               <div className="mt-4">
-                <AttributePicker
-                  attributes={product.attributes as AV[]}
-                  selected={picked}
-                  onChange={setPicked}
-                />
-                {!allAttrsChosen && (
-                  <div className="mt-2 text-xs text-amber-600">
-                    لطفاً همهٔ ویژگی‌های موردنیاز را انتخاب کنید.
+                <AttributePicker attributes={product.attributes as AV[]} selected={picked} onChange={setPicked} />
+
+                {/* پیام کوتاه راهنما: وقتی یکی انتخاب شده و دیگری مانده */}
+                {guidanceMessage && (
+                  <div className="mt-2 text-xs font-medium text-amber-600">
+                    {guidanceMessage}
                   </div>
+                )}
+
+                {/* اگر هیچ‌کدام انتخاب نشده، پیام عمومی (اختیاری) */}
+                {!guidanceMessage && !allAttrsChosen && (
+                  <div className="mt-2 text-xs text-amber-600">
+                    لطفاً ویژگی‌های موردنیاز (سایز/رنگ) را انتخاب کنید.
+                  </div>
+                )}
+
+                {/* نمایش موجودی پس از کامل‌شدن انتخاب‌ها */}
+                {canShowStock && (
+                  <div
+                    className={`mt-2 text-sm ${
+                      (stockLeft ?? 0) <= 3 ? "text-rose-600" : "text-emerald-700"
+                    }`}
+                  >
+                    {(stockLeft ?? 0) > 0
+                      ? `تنها ${toFa(stockLeft!)} عدد باقی‌مانده`
+                      : "ناموجود"}
+                  </div>
+                )}
+
+                {/* اگر واریانت انتخاب‌شده ناموجود باشد */}
+                {selectedVariant && !variantInStock && (
+                  <div className="mt-2 text-xs text-red-600">ناموجود برای این انتخاب</div>
                 )}
               </div>
             )}
 
-            {/* Add to cart (غیرفعال‌سازی با CSS برای سازگاری) */}
-            <div className={`mt-4 ${allAttrsChosen ? "" : "pointer-events-none opacity-60"}`}>
+            {/* Add to cart */}
+            <div className={`mt-4 ${allAttrsChosen && variantInStock ? "" : "pointer-events-none opacity-60"}`}>
               <AddToCartButton
                 id={Number(product.id)}
-                price={Number(product.discount_price ?? product.price)}
+                // ⭐️ قیمت نهایی (واریانت یا تخفیف/قیمت محصول)
+                price={Number(displayPrice)}
                 name={product.name + pickedSummary}
                 image={images[0] || "/placeholder.svg"}
                 className="h-12 w-full rounded-xl bg-pink-600 font-bold text-white hover:bg-pink-700"
+                // ⭐️ برای جلوگیری از قاطی‌شدن سبد (محلی)
+                // @ts-ignore
+                _variantId={selectedVariant?.id ?? null}
               />
             </div>
           </div>
@@ -333,21 +538,33 @@ export default function ProductPage() {
       {/* Tabs */}
       <section className="mt-12">
         <ProductTabs
-          showFeatures={false}                 // 👈 تب ویژگی‌ها را کلاً حذف کن
-          features={
-            Array.isArray(product.attributes)
-              ? (product.attributes as AV[])
-              : Object.entries(product.attributes ?? {}).map(([k, v]) =>
-                  Array.isArray(v) ? `${k}: ${v.join("، ")}` : `${k}: ${String(v)}`
-                )
-          }
-          description={descriptionHtml}
-          sizeChart={product.size_chart}
-          reviewsEnabled={false}
-          initialTab="description"             // 👈 از تب توضیحات شروع کن
-        />
+  showFeatures={true}
+  features={featureLines}             // ⬅️ همین آرایه‌ی رشته‌ای
+  description={descriptionHtml}
+  sizeChart={product.size_chart}
+  reviewsEnabled={true}
+  productId={product.id}
+  productSlug={product.slug || String(product.id)}
+  initialTab="description"
+/>
+
       </section>
 
+      {/* ⭐️ Related products carousel */}
+      {related.length > 0 && (
+        <section className="mt-10">
+          <CardSlider
+            title="محصولات مشابه"
+            items={related}
+            ctaHref={product.category_slug ? `/collection/${product.category_slug}` : undefined}
+            ctaText="مشاهده همه"
+            hrefBase="/product"
+            itemRibbon="ممکنه خوشت بیاد"
+            itemRibbonTone="pink"
+            variant="compact"
+          />
+        </section>
+      )}
     </main>
   );
 }

@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Vazirmatn } from "next/font/google";
 import "./globals.css";
-import Header from "../components/Header";
+
+import Header from "@/components/Header";
 import ClientProviders from "@/components/ClientProviders";
 
 export const metadata: Metadata = {

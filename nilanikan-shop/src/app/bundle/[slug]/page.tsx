@@ -1,3 +1,4 @@
+// src/app/bundle/[slug]/page.tsx
 "use client";
 
 import Image from "next/image";
@@ -7,37 +8,45 @@ import { get, endpoints, absolutizeMedia } from "../../../lib/api";
 import BundleItemPicker from "../../../components/BundleItemPicker";
 import BundleItemsTabs from "../../../components/BundleItemsTabs";
 
+// ---------- Types ----------
+type AttrPair = { name?: string | null; value?: string | null };
+
 type Product = {
   id: number;
-  slug?: string;
-  title?: string;
-  name?: string;
+  slug?: string | null;
+  title?: string | null;
+  name?: string | null;
   price?: number | string | null;
   image?: string | null;
   thumbnail?: string | null;
-  images?: string[];
+  images?: string[] | null;
   description?: string | null;
-  attributes?: Array<{ name?: string; value?: string }> | null;
+  // ممکن است از API به شکل‌های مختلف بیاید:
+  attributes?: any[] | null;
   sizeTable?: string | null;
+  size_chart?: string | null;
+  sizeChart?: string | null;
 };
 
 type Bundle = {
   id: number;
   slug: string;
-  title?: string;
-  name?: string;
+  title?: string | null;
+  name?: string | null;
   description?: string | null;
   image?: string | null;
-  images?: string[];
-  gallery?: { id: number; image: string; alt?: string | null }[];
-  bundle_price?: number | string;
-  price?: number | string;
+  images?: string[] | null;
+  gallery?: { id: number; image: string; alt?: string | null }[] | null;
+  bundle_price?: number | string | null;
+  price?: number | string | null;
   discountType?: "percent" | "fixed" | null;
   discountValue?: number | null;
-  items?: Array<{ productId: number; name: string; price: number; quantity?: number; image?: string | null }>;
-  products?: Product[];
+  // یکی از این‌ها خواهد بود
+  items?: Array<{ productId: number; name: string; price: number; quantity?: number; image?: string | null }> | null;
+  products?: Product[] | null;
 };
 
+// ---------- Helpers ----------
 const listify = <T = any,>(x: any): T[] =>
   Array.isArray(x) ? x : Array.isArray(x?.results) ? x.results : [];
 
@@ -58,6 +67,7 @@ const resolveImage = (src?: string | null, seed?: string) => {
   return `https://picsum.photos/seed/${encodeURIComponent(seed || "bundle")}/1200/1200`;
 };
 
+// آرایه‌ی آیتم‌های باندل را یکدست می‌کنیم
 function normalizeBundleItems(bundle: Bundle) {
   if (Array.isArray(bundle.items) && bundle.items.length > 0) {
     return bundle.items.map((it) => ({
@@ -70,57 +80,70 @@ function normalizeBundleItems(bundle: Bundle) {
   }
   if (Array.isArray(bundle.products) && bundle.products.length > 0) {
     return bundle.products.map((p, idx) => ({
-      productId: p.id,
+      productId: Number(p.id),
       name: p.title || p.name || `آیتم ${idx + 1}`,
       price: toNum(p.price),
       quantity: 1,
-      image: absolutizeMedia(p.image || p.thumbnail || p.images?.[0] || undefined) || null,
+      image: absolutizeMedia(p.image || p.thumbnail || (Array.isArray(p.images) ? p.images[0] : undefined) || undefined) || null,
     }));
   }
   return [] as Array<{ productId: number; name: string; price: number; quantity?: number; image?: string | null }>;
 }
 
-async function fetchBundleAny(key: string): Promise<Bundle | null> {
-  const direct = await get<any>(`${endpoints.bundles}${encodeURIComponent(key)}/`, { throwOnHTTP: false });
-  if (direct && !direct?.detail) return direct as Bundle;
+// گرفتن محصول با id/slug/سرچ (از صفحه‌ی محصول برداشته شده)
+async function fetchProductAny(key: string) {
+  const direct = await get<any>(`${endpoints.products}${encodeURIComponent(key)}/`, { throwOnHTTP: false });
+  if (direct && !direct?.detail) return direct;
 
-  let resp = await get<any>(`${endpoints.bundles}?slug=${encodeURIComponent(key)}`, {
+  let resp = await get<any>(`${endpoints.products}?slug=${encodeURIComponent(key)}`, {
     throwOnHTTP: false, fallback: { results: [] },
   });
-  let arr = listify<Bundle>(resp);
-  let found = arr.find((b) => b?.slug === key) ?? null;
+  let arr = listify(resp);
+  let found = arr.find((p: any) => p?.slug === key);
   if (found) return found;
 
   if (/^\d+$/.test(key)) {
     for (const k of ["id", "pk"]) {
-      resp = await get<any>(`${endpoints.bundles}?${k}=${encodeURIComponent(key)}`, {
+      resp = await get<any>(`${endpoints.products}?${k}=${encodeURIComponent(key)}`, {
         throwOnHTTP: false, fallback: { results: [] },
       });
-      arr = listify<Bundle>(resp);
-      found = arr.find((b) => String(b?.id) === key) ?? null;
+      arr = listify(resp);
+      found = arr.find((p: any) => String(p?.id) === key);
       if (found) return found;
     }
   }
 
-  resp = await get<any>(`${endpoints.bundles}?search=${encodeURIComponent(key)}`, {
+  resp = await get<any>(`${endpoints.products}?search=${encodeURIComponent(key)}`, {
     throwOnHTTP: false, fallback: { results: [] },
   });
-  arr = listify<Bundle>(resp);
-  const found2 =
-    arr.find((b) => b?.slug === key) ??
-    (arr.find((b) => /^\d+$/.test(key) && String(b?.id) === key) ?? null);
-  return found2 ?? null;
+  arr = listify(resp);
+  found = arr.find((p: any) => p?.slug === key) ?? arr.find((p: any) => /^\d+$/.test(key) && String(p?.id) === key);
+  return found ?? null;
 }
 
+// attributes را به [{name,value}] تبدیل می‌کند
+function toNameValue(attrs: any): AttrPair[] {
+  const a = Array.isArray(attrs) ? attrs : [];
+  return a
+    .map((x) => {
+      const name = x?.name ?? x?.attribute ?? null;
+      const value =
+        x?.value ??
+        (Array.isArray(x?.values) ? x.values.filter(Boolean).join("، ") : null) ??
+        x?.value_text ??
+        null;
+      return !name && !value ? null : ({ name, value } as AttrPair);
+    })
+    .filter(Boolean) as AttrPair[];
+}
+
+// ---------- UI Helpers ----------
 function MobileGallery({ images, alt }: { images: string[]; alt: string }) {
   return (
     <div className="lg:hidden">
       <div className="flex overflow-x-auto snap-x snap-mandatory gap-2 scroll-smooth [&::-webkit-scrollbar]:hidden">
         {images.map((src, i) => (
-          <div
-            key={i}
-            className="relative flex-shrink-0 snap-center w-[80%] sm:w-[55%] aspect-[4/5] rounded-xl ring-1 ring-zinc-200 overflow-hidden"
-          >
+          <div key={i} className="relative flex-shrink-0 snap-center w-[80%] sm:w-[55%] aspect-[4/5] rounded-xl ring-1 ring-zinc-200 overflow-hidden">
             <Image src={src || "/placeholder.svg"} alt={alt} fill className="object-cover" sizes="80vw" />
           </div>
         ))}
@@ -151,18 +174,15 @@ function DesktopGallery({
       </div>
       <div className="relative aspect-[4/5] w-full rounded-2xl ring-1 ring-zinc-200 overflow-hidden">
         <Image
-          src={main || "/placeholder.svg"}
-          alt={alt}
-          fill
-          className="object-cover"
-          sizes="(min-width:1536px) 520px, (min-width:1280px) 380px, 340px"
-          priority
+          src={main || "/placeholder.svg"} alt={alt} fill className="object-cover"
+          sizes="(min-width:1536px) 520px, (min-width:1280px) 380px, 340px" priority
         />
       </div>
     </div>
   );
 }
 
+// ---------- Page ----------
 export default function BundleDetailPage() {
   const params = useParams() as { slug?: string } | null;
   const router = useRouter();
@@ -173,24 +193,34 @@ export default function BundleDetailPage() {
   const [err, setErr] = useState<string | null>(null);
   const [active, setActive] = useState(0);
 
-  const [summary, setSummary] = useState({
-    total: 0, subtotal: 0, discountAmount: 0, selectedCount: 0, selectedQty: 0,
-  });
+  // خلاصه‌ی قیمت از پیکر
+  const [summary, setSummary] = useState({ total: 0, subtotal: 0, discountAmount: 0, selectedCount: 0, selectedQty: 0 });
   const handleSummaryChange = useCallback((s: typeof summary) => setSummary(s), []);
 
+  // محصولات کامل (وقتی باندل خودش attributes ندارد)
+  const [productsFull, setProductsFull] = useState<Product[]>([]);
+
+  // دریافت باندل
   useEffect(() => {
     let alive = true;
     (async () => {
       setLoading(true);
       setErr(null);
       try {
-        const data = await fetchBundleAny(slug);
+        const data = await get<any>(`${endpoints.bundles}${encodeURIComponent(slug)}/`, { throwOnHTTP: false });
         if (!alive) return;
-        if (data) {
-          setBundle(data);
+        if (data && !data?.detail) {
+          setBundle(data as Bundle);
           if (data.slug && slug !== data.slug) router.replace(`/bundle/${encodeURIComponent(data.slug)}`);
         } else {
-          setErr("باندل پیدا نشد");
+          // جستجو بر اساس slug
+          const resp = await get<any>(`${endpoints.bundles}?slug=${encodeURIComponent(slug)}`, {
+            throwOnHTTP: false, fallback: { results: [] },
+          });
+          const arr = listify<Bundle>(resp);
+          const found = arr.find((b) => b?.slug === slug) ?? null;
+          if (found) setBundle(found);
+          else setErr("باندل پیدا نشد");
         }
       } catch (e: any) {
         if (!alive) return;
@@ -202,53 +232,99 @@ export default function BundleDetailPage() {
     return () => { alive = false; };
   }, [slug, router]);
 
+  // اگر attributes نداریم، محصولات آیتم‌ها را جداگانه بگیر
+  useEffect(() => {
+    (async () => {
+      if (!bundle) return;
+      const hasAttrsOnBundleProducts =
+        Array.isArray(bundle.products) &&
+        bundle.products.some((p) => Array.isArray(p?.attributes) && (p!.attributes as any[]).length > 0);
+
+      if (hasAttrsOnBundleProducts) {
+        setProductsFull([]); // نیازی نیست
+        return;
+      }
+
+      const items = normalizeBundleItems(bundle);
+      if (!items.length) return;
+
+      // گرفتن محصولات با id (سریالی برای ساده بودن/کاهش فشار)
+      const out: Product[] = [];
+      for (const it of items) {
+        const p = await fetchProductAny(String(it.productId));
+        if (p) out.push(p as Product);
+      }
+      setProductsFull(out);
+    })();
+  }, [bundle]);
+
   const name = bundle?.title || bundle?.name || "باندل";
 
+  // گالری
   const images = useMemo(() => {
     if (!bundle) return [] as string[];
     const galleryRaw: string[] = [
-      ...(Array.isArray(bundle.images) ? bundle.images : []),
-      ...(Array.isArray(bundle.gallery) ? bundle.gallery.map((g) => g.image) : []),
+      ...(Array.isArray(bundle.images) ? bundle.images! : []),
+      ...(Array.isArray(bundle.gallery) ? bundle.gallery!.map((g) => g.image) : []),
       ...(bundle.image ? [bundle.image] : []),
     ];
     return galleryRaw.map((g, i) => resolveImage(g, (bundle?.slug || "bundle") + "_" + i));
   }, [bundle]);
 
+  // آیتم‌ها برای پیکر سبد
   const normalizedItems = useMemo(() => (bundle ? normalizeBundleItems(bundle) : []), [bundle]);
   const hasItems = normalizedItems.length > 0;
 
-  // ✅ پاس دادن توضیحات، ویژگی‌ها و جدول سایز
+  // محصولات برای تب پایین (همیشه [{name,value}] بده)
   const productsForTabs = useMemo(() => {
-    if (Array.isArray(bundle?.products) && bundle!.products.length > 0) {
-      return bundle!.products.map((p) => ({
-        id: p.id,
-        slug: p.slug,
-        name: p.name || p.title,
-        title: p.title,
-        price: p.price,
-        image: p.image || p.thumbnail || (p.images?.[0] ?? null),
-        images: p.images ?? [],
-        description: p.description ?? null,
-        attributes: p.attributes ?? [],
-        sizeTable: p.sizeTable ?? null,
-        thumbnail: p.thumbnail ?? null,
-      }));
+    const source: Product[] =
+      (Array.isArray(bundle?.products) && bundle!.products!.length > 0 ? (bundle!.products as Product[]) :
+        productsFull.length > 0 ? productsFull : []);
+
+    if (source.length > 0) {
+      return source.map((p) => {
+        const img =
+          p.image ??
+          p.thumbnail ??
+          (Array.isArray(p.images) && p.images.length > 0 ? p.images[0] : null) ??
+          null;
+
+        const images = Array.isArray(p.images) ? (p.images.filter(Boolean) as string[]) : [];
+
+        const sizeTable =
+          (p as any).sizeTable ?? p.size_chart ?? p.sizeChart ?? null;
+
+        return {
+          id: Number(p.id),
+          slug: p.slug ?? null,
+          name: p.name || p.title || "",
+          title: p.title || p.name || "",
+          price: p.price ?? null,
+          image: img,
+          images,
+          description: p.description ?? null,
+          attributes: toNameValue(p.attributes),
+          sizeTable,
+          thumbnail: p.thumbnail ?? null,
+        };
+      });
     }
 
+    // اگر هنوز محصول کامل نداریم، حداقل کارت‌های ساده از items
     return normalizedItems.map((it) => ({
       id: it.productId,
+      slug: null,
       name: it.name,
       title: it.name,
       price: it.price,
       image: it.image || null,
       images: it.image ? [it.image] : [],
       description: "",
-      attributes: [],
+      attributes: [] as AttrPair[],
       sizeTable: null,
-      slug: null,
       thumbnail: null,
     }));
-  }, [bundle, normalizedItems]);
+  }, [bundle, productsFull, normalizedItems]);
 
   if (loading)
     return <main className="mx-auto max-w-7xl px-4 py-8" dir="rtl">در حال بارگذاری…</main>;
@@ -257,6 +333,7 @@ export default function BundleDetailPage() {
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-6 md:py-8" dir="rtl">
+      {/* breadcrumbs */}
       <nav className="mb-4 flex flex-wrap items-center gap-2 text-sm text-zinc-500">
         <span>محصولات</span> <span>›</span>
         <span>ست‌ها</span> <span>›</span>
@@ -272,11 +349,13 @@ export default function BundleDetailPage() {
           lg:items-start
         "
       >
+        {/* Gallery */}
         <section className="lg:col-start-1 lg:col-end-2">
           <MobileGallery images={images} alt={name} />
           <DesktopGallery images={images} alt={name} active={active} setActive={setActive} />
         </section>
 
+        {/* Middle column: description + picker */}
         <section className="lg:col-start-2 lg:col-end-3 min-w-0">
           <header className="mb-3">
             <h1 className="text-xl md:text-2xl font-extrabold text-zinc-900">{name}</h1>
@@ -294,9 +373,9 @@ export default function BundleDetailPage() {
             <div id="bundle-items" className="mt-6">
               <BundleItemPicker
                 bundleId={bundle.id}
-                title={bundle.title || bundle.name}
-                discountType={bundle.discountType}
-                discountValue={bundle.discountValue}
+                title={bundle.title || bundle.name || undefined}
+                discountType={bundle.discountType ?? null}
+                discountValue={bundle.discountValue ?? null}
                 items={normalizedItems}
                 onSummaryChange={handleSummaryChange}
               />
@@ -304,6 +383,7 @@ export default function BundleDetailPage() {
           )}
         </section>
 
+        {/* Right column: price box */}
         <aside className="lg:col-start-3 lg:col-end-4">
           <div className="sticky top-4 rounded-2xl border border-zinc-200 bg-white p-4">
             <div className="rounded-xl bg-pink-50 p-3 text-center">
@@ -334,10 +414,12 @@ export default function BundleDetailPage() {
         </aside>
       </div>
 
+      {/* Tabs (features/size/description per item) */}
       <div className="mt-10">
         <BundleItemsTabs products={productsForTabs} />
       </div>
 
+      {/* Mobile sticky bar */}
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-zinc-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/70 p-3 md:hidden">
         <div className="flex items-center justify-between">
           <div className="text-sm">
@@ -346,10 +428,7 @@ export default function BundleDetailPage() {
               {summary.total.toLocaleString("fa-IR")} <span className="text-xs">تومان</span>
             </div>
           </div>
-          <a
-            href="#bundle-items"
-            className="h-10 rounded-xl bg-pink-600 px-3 text-xs font-bold text-white hover:bg-pink-700"
-          >
+          <a href="#bundle-items" className="h-10 rounded-xl bg-pink-600 px-3 text-xs font-bold text-white hover:bg-pink-700">
             افزودن به سبد
           </a>
         </div>

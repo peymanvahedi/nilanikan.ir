@@ -7,8 +7,12 @@ export type CartItem = {
   price: number;
   image?: string | null;
   qty: number;
+  // ⭐️ برای تفکیک سبد بر اساس سایز
+  _variantId?: number | string | null;
 };
-export type CartItemBase = Pick<CartItem, "id" | "name" | "price" | "image">;
+export type CartItemBase = Pick<CartItem, "id" | "name" | "price" | "image"> & {
+  _variantId?: number | string | null;
+};
 
 const LS_KEYS = ["cart.items", "cart"] as const;
 
@@ -77,7 +81,12 @@ function normalizeAnyArray(arr: any[]): CartItem[] {
       const price = Number(it?.price ?? it?.unit_price ?? it?.product?.price ?? 0) || 0;
       const image = (it?.image ?? it?.thumbnail ?? it?.images?.[0] ?? it?.product?.image) ?? null;
       const qty = Number(it?.qty ?? it?.quantity ?? it?.count ?? 1) || 1;
-      return { id, name, price, image, qty } as CartItem;
+      const _variantId =
+        (it as any)?._variantId ??
+        (it as any)?.variant_id ??
+        (it as any)?.variantId ??
+        null;
+      return { id, name, price, image, qty, _variantId } as CartItem;
     })
     .filter(Boolean) as CartItem[];
 }
@@ -122,108 +131,6 @@ function dispatchSet(count: number) {
     window.dispatchEvent(new CustomEvent("cart:set", { detail: { count } }));
     window.dispatchEvent(new Event("cart-change"));
   } catch {}
-}
-
-/* ------------------------- AUTH/CSRF helper layer ------------------------- */
-async function csrfPreflight(): Promise<{ xsrf?: string } | null> {
-  const base = getApiBase();
-  const hit = async (path: string) => {
-    try {
-      const res = await fetch(`${base}${path}`, {
-        method: "GET",
-        credentials: "include",
-        headers: { "X-Requested-With": "XMLHttpRequest", Accept: "application/json" },
-      });
-      return res.ok || res.status === 204;
-    } catch {
-      return false;
-    }
-  };
-  const ok = (await hit("/sanctum/csrf-cookie")) || (await hit("/csrf-cookie"));
-  if (!ok) return null;
-  const xsrf = readCookie("XSRF-TOKEN") || readCookie("xsrf-token") || undefined;
-  return { xsrf };
-}
-
-/* مسیرهای محتمل checkout را امتحان می‌کنیم */
-function resolveCheckoutUrls(): string[] {
-  const list = [
-    endpoints?.checkout ? toAbs(endpoints.checkout) : "",
-    toAbs("/api/checkout"),
-    toAbs("/checkout"),
-  ].filter(Boolean);
-  // de-dup
-  return Array.from(new Set(list));
-}
-
-/* اول سشن/CSRF، بعداً سایر واریانت‌ها */
-function buildAuthVariantsSessionFirst(url: string) {
-  const token = readToken();
-  const apiKey = readApiKey();
-
-  const headerVariants: Array<Record<string, string>> = [];
-  // 1) فقط سشن/CSRF
-  headerVariants.push({});
-  // 2) API Key
-  if (apiKey) headerVariants.push({ "X-API-KEY": apiKey });
-  // 3) Bearer/Token (در انتها)
-  if (token) {
-    headerVariants.push({ Authorization: `Bearer ${token}` });
-    headerVariants.push({ Authorization: `Token ${token}` });
-  }
-
-  const urlVariants = [url];
-  // پارامتر api_token را فقط در انتها تست می‌کنیم
-  if (token) urlVariants.push(`${url}${url.includes("?") ? "&" : "?"}api_token=${encodeURIComponent(token)}`);
-
-  return { headerVariants, urlVariants };
-}
-
-async function sendWithAuthOnce(
-  inputUrl: string,
-  init: RequestInit,
-  { useJson }: { useJson: boolean }
-) {
-  const xsrf = readCookie("XSRF-TOKEN") || readCookie("xsrf-token") || undefined;
-  const baseHeaders: Record<string, string> = {
-    "X-Requested-With": "XMLHttpRequest",
-    Accept: "application/json",
-    ...(xsrf ? { "X-XSRF-TOKEN": decodeURIComponent(xsrf) } : {}),
-    ...(xsrf ? { "X-CSRF-TOKEN": decodeURIComponent(xsrf) } : {}),
-  };
-  const { headerVariants, urlVariants } = buildAuthVariantsSessionFirst(inputUrl);
-
-  for (const u of urlVariants) {
-    for (const hv of headerVariants) {
-      const headers: Record<string, string> = {
-        ...baseHeaders,
-        ...(init.headers as Record<string, string>),
-        ...hv,
-      };
-      if (useJson) headers["Content-Type"] = "application/json";
-
-      const res = await fetch(u, {
-        ...init,
-        credentials: "include",
-        headers,
-      });
-
-      if (res.status !== 401 && res.status !== 419) return res;
-    }
-  }
-  return new Response("Unauthorized", { status: 401, statusText: "Unauthorized" });
-}
-
-async function sendWithAuthAndCsrfRetry(
-  url: string,
-  init: RequestInit,
-  { useJson }: { useJson: boolean }
-) {
-  let res = await sendWithAuthOnce(url, init, { useJson });
-  if (res.status !== 401 && res.status !== 419) return res;
-  await csrfPreflight();
-  res = await sendWithAuthOnce(url, init, { useJson });
-  return res;
 }
 
 /* ------------------------------ SERVER IO ----------------------------- */
@@ -294,9 +201,14 @@ export async function addToCart(item: CartItemBase, qty = 1) {
 
   if (typeof window === "undefined") return;
   const items = readLocal();
-  const idx = items.findIndex((x) => String(x.id) === String(item.id));
+  // ⭐️ ادغام فقط وقتی _variantId یکی باشد
+  const idx = items.findIndex(
+    (x) =>
+      String(x.id) === String(item.id) &&
+      String((x as any)._variantId ?? "") === String((item as any)._variantId ?? "")
+  );
   if (idx >= 0) items[idx] = { ...items[idx]!, qty: (items[idx]!.qty || 0) + q };
-  else items.push({ ...item, image: item.image ?? null, qty: q });
+  else items.push({ ...(item as any), image: item.image ?? null, qty: q });
   writeLocal(items);
   dispatchAdd(q);
 }
@@ -329,9 +241,14 @@ export async function addManyToCart(itemsIn: CartItemBase[], qtyEach = 1) {
   if (typeof window === "undefined") return;
   const items = readLocal();
   for (const it of itemsIn) {
-    const idx = items.findIndex((x) => String(x.id) === String(it.id));
+    // ⭐️ ادغام فقط وقتی _variantId یکی باشد
+    const idx = items.findIndex(
+      (x) =>
+        String(x.id) === String(it.id) &&
+        String((x as any)._variantId ?? "") === String((it as any)._variantId ?? "")
+    );
     if (idx >= 0) items[idx] = { ...items[idx]!, qty: (items[idx]!.qty || 0) + q };
-    else items.push({ ...it, image: it.image ?? null, qty: q });
+    else items.push({ ...(it as any), image: it.image ?? null, qty: q });
   }
   writeLocal(items);
   dispatchAdd(totalQty);
@@ -391,11 +308,14 @@ export async function clearCart(): Promise<CartItem[]> {
   try {
     if (hasToken()) {
       try {
-        await post(endpoints.cartClear ?? `${endpoints.cart}clear/`, { confirm: true }, { auth: true });
+        // مستقیماً از مسیر استاندارد clear/ استفاده می‌کنیم
+        await post(`${endpoints.cart}clear/`, { confirm: true }, { auth: true });
       } catch {
         try {
+          // برخی بک‌اندها حذف همه آیتم‌ها را با DELETE روی /cart/ می‌پذیرند
           await del(endpoints.cart, { auth: true });
         } catch {
+          // تلاش نهایی
           await post(`${endpoints.cart}clear/`, { confirm: true }, { auth: true });
         }
       }
@@ -414,26 +334,20 @@ export async function clearCart(): Promise<CartItem[]> {
   return [];
 }
 
+
 /** ثبت سفارش (ساده و سازگار با Django) */
 export async function checkout(payload?: Record<string, any>) {
-  // فقط همون چیزایی که بک‌اند نیاز داره بفرست؛ بقیه رو نفرست که 500 نگیری
   const body = {
-    address:        payload?.address ?? "",
-    postal_code:    payload?.postal_code ?? payload?.postalCode ?? "",
+    address:         payload?.address ?? "",
+    postal_code:     payload?.postal_code ?? payload?.postalCode ?? "",
     shipping_method: payload?.shipping_method ?? payload?.shipping?.method ?? "post",
     shipping_cost:   payload?.shipping_cost ?? payload?.shipping?.cost ?? 0,
   };
 
   try {
-    // حتماً با auth:true تا هدر Bearer اضافه شود
-const data = await post(endpoints.checkout, body, { auth: true });
-    // انتظار: { order_id, total_amount, status }
+    const data = await post(endpoints.checkout, body, { auth: true });
     return { ok: true as const, data };
   } catch (e: any) {
-    // متن خطا را ساده برگردان تا روی صفحه چاپ شود
-    return {
-      ok: false as const,
-      error: e?.message || "Checkout failed",
-    };
+    return { ok: false as const, error: e?.message || "Checkout failed" };
   }
 }

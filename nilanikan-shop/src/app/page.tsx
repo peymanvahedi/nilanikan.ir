@@ -119,7 +119,7 @@ function toBundleCardItem(r: any) {
   const href =
     firstTruthy(base.href, base.link, base.target) ||
     (hasSlug ? `/bundle/${base.slug}` : "/bundle");
-  return { ...base, href }; // ← تغییر اصلی
+  return { ...base, href };
 }
 
 /* کارت‌های معمولی (مثلاً جدیدترین‌ها) */
@@ -195,19 +195,18 @@ export default async function Page() {
           </section>
         )}
 
-        {/* ست‌ها و پافر — حالا حتماً به باندل می‌رود */}
+        {/* ست‌ها و پافر */}
         <section aria-label="ست‌ها و پافر">
           <CardSlider
-  title="ست‌ها و پافر"
-  items={setsAndPufferItems}
-  ctaHref="/collection/set"
-  ctaText="مشاهده همه"
-  hrefBase="/bundle"
-  itemRibbon="پربازدید"
-  itemRibbonTone="pink"
-  variant="compact"
-/>
-
+            title="ست‌ها و پافر"
+            items={setsAndPufferItems}
+            ctaHref="/collection/set"
+            ctaText="مشاهده همه"
+            hrefBase="/bundle"
+            itemRibbon="پربازدید"
+            itemRibbonTone="pink"
+            variant="compact"
+          />
         </section>
 
         {/* تن‌خور کوچک */}
@@ -217,6 +216,7 @@ export default async function Page() {
 
         {/* پرفروش‌ها */}
         <section aria-label="پرفروش‌ترین‌ها">
+          {/* ❗️بدون هیچ تبدیل قیمتی؛ تبدیل/فرمت داخل BestSellersSlider انجام می‌شود */}
           <BestSellersSlider products={listify(data?.bestSellers)} />
         </section>
 

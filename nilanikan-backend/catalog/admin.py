@@ -10,6 +10,7 @@ from .models import (
     Banner,
     Attribute,
     AttributeValue,
+    ProductVariant,  # ← اضافه شد
 )
 
 # ---------------------------
@@ -45,6 +46,15 @@ class ProductImageInline(admin.TabularInline):
     preview.short_description = "پیش‌نمایش"
 
 
+# ---------------------------
+# Product Variants Inline
+# ---------------------------
+class ProductVariantInline(admin.TabularInline):
+    model = ProductVariant
+    extra = 1
+    autocomplete_fields = ("size",)
+
+
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
     list_display = (
@@ -55,7 +65,7 @@ class ProductAdmin(admin.ModelAdmin):
     list_editable = ("is_active", "is_recommended")
     search_fields = ("name", "sku", "slug")
     prepopulated_fields = {"slug": ("name",)}
-    inlines = [ProductImageInline]
+    inlines = [ProductImageInline, ProductVariantInline]  # ← Variant اضافه شد
     filter_horizontal = ("attributes",)  # ⟵ مدیریت ویژگی‌های ساده
 
 

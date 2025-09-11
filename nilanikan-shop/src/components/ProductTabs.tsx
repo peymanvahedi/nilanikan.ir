@@ -2,6 +2,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import ProductReviews from "@/components/ProductReviews";
 
 type SizeChart = {
   headers: string[];
@@ -24,12 +25,16 @@ type Props = {
   description?: string | null;
   /** جدول سایز (اختیاری) */
   sizeChart?: SizeChart | null;
-  /** فعال‌سازی بخش نظرات (فعلاً استفاده نمی‌شود) */
+  /** فعال‌سازی بخش نظرات */
   reviewsEnabled?: boolean;
   /** تب ابتدایی (اگر تب وجود نداشته باشد، به اولین تب موجود می‌رود) */
-  initialTab?: "features" | "description" | "size";
+  initialTab?: "features" | "description" | "size" | "reviews";
   /** 👇 با این prop می‌توان تب ویژگی‌ها را کلاً پنهان کرد */
   showFeatures?: boolean;
+
+  /** برای اتصال دیدگاه‌ها به محصول */
+  productId: number | string;
+  productSlug: string;
 };
 
 function isAttrObj(x: any): x is AttributeValue {
@@ -43,10 +48,12 @@ export default function ProductTabs({
   reviewsEnabled = false,
   initialTab = "features",
   showFeatures = true,
+  productId,
+  productSlug,
 }: Props) {
   // تب‌ها را بر اساس داده‌ها و prop ها می‌سازیم
   const tabs = useMemo(() => {
-    const out: { id: "features" | "description" | "size"; label: string }[] = [];
+    const out: { id: "features" | "description" | "size" | "reviews"; label: string }[] = [];
     if (showFeatures) {
       out.push({ id: "features", label: "ویژگی‌ها" });
     }
@@ -56,15 +63,18 @@ export default function ProductTabs({
     if (sizeChart && Array.isArray(sizeChart.headers) && Array.isArray(sizeChart.rows)) {
       out.push({ id: "size", label: "جدول سایز" });
     }
+    if (reviewsEnabled) {
+      out.push({ id: "reviews", label: "دیدگاه‌ها" });
+    }
     // اگر داده‌ای نبود، حداقل توضیحات را نشان نده (out خالی بماند)
     return out;
-  }, [showFeatures, description, sizeChart]);
+  }, [showFeatures, description, sizeChart, reviewsEnabled]);
 
   // تب اولیه اگر در بین تب‌های موجود نباشد، به اولین تب موجود می‌رویم
   const resolvedInitial =
     tabs.find((t) => t.id === initialTab)?.id ?? (tabs[0]?.id ?? "description");
 
-  const [tab, setTab] = useState<"features" | "description" | "size">(resolvedInitial);
+  const [tab, setTab] = useState<"features" | "description" | "size" | "reviews">(resolvedInitial);
 
   const normFeatures = useMemo(() => {
     // خروجی یکنواخت: [{label, value, color_code?}, ...]
@@ -179,6 +189,13 @@ export default function ProductTabs({
             {sizeChart.note && (
               <p className="mt-2 text-xs text-zinc-500">{sizeChart.note}</p>
             )}
+          </div>
+        )}
+
+        {/* دیدگاه‌ها */}
+        {tab === "reviews" && reviewsEnabled && (
+          <div id="tab-reviews">
+            <ProductReviews productId={productId} productSlug={productSlug} />
           </div>
         )}
 
