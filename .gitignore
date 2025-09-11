@@ -1,0 +1,48 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.sqlite3
+
+# Node/Next.js
+node_modules/
+.next/
+out/
+
+# Env files
+.env
+.env.*
+
+# === local/server ignores ===
+*.bak.*
+*.log
+.DS_Store
+
+# env & secrets
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+
+# node / next
+node_modules/
+.next/
+out/
+dist/
+build/
+.vercel/
+
+# python / django
+**/__pycache__/
+**/*.pyc
+media/
+staticfiles/
+
+# docker
+*.pid
+*.sock
+**/.pytest_cache/
+
+# allow sample env
+!.env.example
