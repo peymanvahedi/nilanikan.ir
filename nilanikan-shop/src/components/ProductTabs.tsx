@@ -3,6 +3,7 @@
 
 import { useMemo, useState } from "react";
 import ProductReviews from "@/components/ProductReviews";
+import ProductSizeNote from "./ProductSizeNote";
 
 type SizeChart = {
   headers: string[];
@@ -162,35 +163,47 @@ export default function ProductTabs({
         )}
 
         {/* جدول سایز */}
-        {tab === "size" && sizeChart && (
-          <div id="tab-size" className="overflow-x-auto">
-            <table className="w-full border-collapse text-sm">
-              <thead>
-                <tr className="bg-zinc-50">
-                  {(sizeChart.headers || []).map((h, i) => (
-                    <th key={i} className="px-3 py-2 text-right font-bold border-b border-zinc-200">
-                      {String(h)}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {(sizeChart.rows || []).map((r, ri) => (
-                  <tr key={ri}>
-                    {r.map((c, ci) => (
-                      <td key={ci} className="px-3 py-2 border-b border-zinc-100">
-                        {String(c)}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {sizeChart.note && (
-              <p className="mt-2 text-xs text-zinc-500">{sizeChart.note}</p>
-            )}
-          </div>
-        )}
+{tab === "size" && sizeChart && (
+  <div id="tab-size" className="overflow-x-auto">
+
+    {/* راهنمای انتخاب سایز – وسط‌چین */}
+    <div className="mt-4 flex justify-center text-center">
+      <ProductSizeNote />
+    </div>
+
+    <table className="w-full border-collapse text-sm mt-4">
+      <thead>
+        <tr className="bg-zinc-50">
+          {(sizeChart.headers || []).map((h, i) => (
+            <th
+              key={i}
+              className="px-3 py-2 text-right font-bold border-b border-zinc-200"
+            >
+              {String(h)}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {(sizeChart.rows || []).map((r, ri) => (
+          <tr key={ri}>
+            {r.map((c, ci) => (
+              <td key={ci} className="px-3 py-2 border-b border-zinc-100">
+                {String(c)}
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+
+    {sizeChart.note && (
+      <p className="mt-2 text-xs text-zinc-500">{sizeChart.note}</p>
+    )}
+  </div>
+)}
+
+        
 
         {/* دیدگاه‌ها */}
         {tab === "reviews" && reviewsEnabled && (

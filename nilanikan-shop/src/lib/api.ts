@@ -5,18 +5,18 @@
 export const API_BASE = (process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000")
   .replace(/\/+$/, "");
 
-// Endpoints
 export const endpoints = {
   home: "/api/home/",
   bundles: "/api/bundles/",
   products: "/api/products/",
   categories: "/api/categories/",
   cart: "/api/cart/",
-  checkout: "/api/checkout/",
+  // مسیر درست چک‌اوت:
+  checkout: "/api/orders/checkout/",
 };
 
 // ───────────────────────────────────────────────────────────
-// Helpers
+// URL helpers
 function ensurePath(p: string) {
   if (!p) return "/";
   if (p.startsWith("http://") || p.startsWith("https://")) return p;
@@ -27,6 +27,27 @@ function buildUrl(path: string) {
   return `${API_BASE}${ensurePath(path)}`;
 }
 
+// ───────────────────────────────────────────────────────────
+// Query helpers
+export type Query = Record<string, any>;
+
+export function buildQuery(q?: Query) {
+  if (!q) return "";
+  const params = new URLSearchParams();
+
+  const append = (k: string, v: any) => {
+    if (v === undefined || v === null || v === "") return;
+    if (Array.isArray(v)) v.forEach((vv) => append(k, vv));
+    else params.append(k, String(v));
+  };
+
+  Object.entries(q).forEach(([k, v]) => append(k, v));
+  const s = params.toString();
+  return s ? `?${s}` : "";
+}
+
+// ───────────────────────────────────────────────────────────
+// Error
 class ApiError extends Error {
   status?: number;
   url?: string;
@@ -39,13 +60,15 @@ class ApiError extends Error {
   }
 }
 
+// ───────────────────────────────────────────────────────────
+// Low-level fetch
 async function _fetch(url: string, init: RequestInit = {}) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 15000);
   try {
     const res = await fetch(url, {
       cache: "no-store",
-      credentials: "include",
+      credentials: "omit", // بدون کوکی/سشن
       headers: { Accept: "application/json", ...(init.headers || {}) },
       signal: ctrl.signal,
       ...init,
@@ -61,10 +84,8 @@ async function _fetch(url: string, init: RequestInit = {}) {
   }
 }
 
-// نوع آپشن‌ها (به‌همراه auth برای سازگاری با cart.ts)
 export type ReqOpts = { throwOnHTTP?: boolean; fallback?: any; init?: RequestInit; auth?: boolean };
 
-// درخواست‌های عمومی
 async function request<T = any>(method: string, path: string, body?: any, opts?: ReqOpts): Promise<T> {
   const url = buildUrl(path);
   const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
@@ -98,7 +119,7 @@ export async function del<T = any>(path: string, opts?: ReqOpts): Promise<T> {
 }
 
 // ───────────────────────────────────────────────────────────
-// Media helpers
+// Media utils
 const MEDIA_BASE = (process.env.NEXT_PUBLIC_MEDIA_BASE_URL ?? "").replace(/\/+$/, "");
 const MEDIA_PREFIX = (process.env.NEXT_PUBLIC_MEDIA_PREFIX ?? "/media/").replace(/\/?$/, "/");
 
@@ -116,14 +137,24 @@ export function absolutizeMedia(u?: string | null): string {
   return buildUrl(url.startsWith("/") ? url : `/${url}`);
 }
 
-// ───────────────────────────────────────────────────────────
-// listify + fetchHome
 export function listify<T = any>(x: any): T[] {
   return Array.isArray(x) ? x : Array.isArray(x?.results) ? x.results : [];
 }
 
-// ✅ تابعی که Page نیاز دارد
+// ───────────────────────────────────────────────────────────
+// High-level helpers
 export async function fetchHome(): Promise<any> {
-  // اگر بک‌اند نبود/خطا داد، آبجکت خالی برگردان تا صفحه کرش نکند
   return await get(endpoints.home, { throwOnHTTP: false, fallback: {} });
+}
+
+export type APIResponse<T> = { results: T[] } | T;
+
+// تست/استفاده در چک‌اوت: بعد از دریافت payment_url، ریدایرکت کن
+export async function startCheckout(body: Record<string, any>) {
+  const res = await post(endpoints.checkout, body, { throwOnHTTP: false });
+  if (res?.payment_url) {
+    if (typeof window !== "undefined") window.location.href = res.payment_url;
+    return res;
+  }
+  return res; // شامل detail/error برای نمایش
 }

@@ -24,16 +24,19 @@ type CategoryInfo = {
   name?: string;
   title?: string;
   description?: string | null;
+  // ↓↓↓ افزوده شد: برای نمایش آیکن و بنر دسته
+  icon?: string | null;
+  image?: string | null;
 };
 
 export const dynamic = "force-dynamic";
 
 /* ----------------- Helpers ----------------- */
 function listify(x: ProductsResponse): ProductListItem[] {
-  return Array.isArray(x) ? x : Array.isArray(x.results) ? x.results : [];
+  return Array.isArray(x) ? x : Array.isArray((x as any).results) ? (x as any).results : [];
 }
 function getCount(x: ProductsResponse): number | undefined {
-  return Array.isArray(x) ? x.length : x.count;
+  return Array.isArray(x) ? x.length : (x as any).count;
 }
 
 async function fetchCategory(slug: string): Promise<CategoryInfo | null> {
@@ -104,12 +107,36 @@ export default async function CategoryPage({ params, searchParams }: PageProps) 
 
   return (
     <main className="container mx-auto px-4 py-6" dir="rtl">
-      <header className="mb-6 space-y-1">
-        <h1 className="text-xl md:text-2xl font-bold">
-          {catInfo?.title || catInfo?.name || slug}
-        </h1>
+      <header className="mb-6 space-y-2">
+        <div className="flex items-center gap-2">
+          {/* آیکن کوچک کنار عنوان (اختیاری) */}
+          {catInfo?.icon ? (
+            <img
+              src={catInfo.icon}
+              alt={catInfo?.name || catInfo?.title || "آیکن دسته"}
+              className="h-6 w-6 rounded-md object-cover"
+              loading="lazy"
+            />
+          ) : null}
+          <h1 className="text-xl md:text-2xl font-bold">
+            {catInfo?.title || catInfo?.name || slug}
+          </h1>
+        </div>
+
         {catInfo?.description ? (
           <p className="text-sm text-zinc-600">{catInfo.description}</p>
+        ) : null}
+
+        {/* بنر/هدر دسته (جدید) */}
+        {catInfo?.image ? (
+          <div className="mt-3 overflow-hidden rounded-2xl">
+            <img
+              src={catInfo.image}
+              alt={catInfo?.name || catInfo?.title || "بنر دسته"}
+              className="w-full h-auto object-cover"
+              loading="lazy"
+            />
+          </div>
         ) : null}
       </header>
 

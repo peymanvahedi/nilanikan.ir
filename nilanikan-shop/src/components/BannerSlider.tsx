@@ -10,14 +10,14 @@ type Props = { slides?: Slide[] };
 
 const AUTOPLAY_MS = 5000;
 
-// فقط روی heroSlides کار می‌کنه
+// فقط روی heroSlides کار می‌کند
 function normalize(input?: Slide[]): NormalizedSlide[] {
   if (!input?.length) return [];
   return input.map((s, i) => ({
     id: s.id ?? i,
     src: s.imageUrl ?? "",
     href: s.link ?? undefined,
-    alt: s.alt ?? s.title ?? `slide ${i + 1}`,
+    alt: s.title ?? `slide ${i + 1}`,
   }));
 }
 
@@ -26,7 +26,6 @@ export default function BannerSlider({ slides }: Props) {
   const [index, setIndex] = useState(0);
 
   const trackRef = useRef<HTMLDivElement | null>(null);
-  const containerRef = useRef<HTMLDivElement | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -38,8 +37,9 @@ export default function BannerSlider({ slides }: Props) {
     if (!len) return;
     const next = ((i % len) + len) % len;
     setIndex(next);
-    const track = trackRef.current;
-    if (track) track.style.transform = `translate3d(${-next * 100}%, 0, 0)`;
+    if (trackRef.current) {
+      trackRef.current.style.transform = `translate3d(${-next * 100}%,0,0)`;
+    }
   }
 
   function start() {
@@ -61,12 +61,12 @@ export default function BannerSlider({ slides }: Props) {
     return stop;
   }, [index, items.length]);
 
+  // ✅ اگر هیچ اسلایدی نیست، هیچ چیزی نشان نده
   if (!items.length) return null;
 
   return (
     <section className="relative z-20 w-full select-none" aria-label="اسلایدر">
       <div
-        ref={containerRef}
         className="relative w-full overflow-hidden rounded-xl bg-zinc-100
                    h-[220px] sm:h-[280px] md:h-[360px] lg:h-[420px] xl:h-[460px]"
         onMouseEnter={stop}

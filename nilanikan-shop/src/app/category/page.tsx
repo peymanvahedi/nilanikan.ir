@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { get, endpoints } from "@/lib/api";
+import { get, endpoints, API_BASE } from "@/lib/api"; // ✅ اضافه کردن API_BASE
 import SafeImg from "@/components/SafeImg";
 
 type Category = {
@@ -10,7 +10,8 @@ type Category = {
   description?: string | null;
 };
 
-const BASE = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000";
+// ✅ استفاده از تعریف مرکزی
+const BASE = API_BASE;
 
 function resolveImage(src?: string | null, seed?: string) {
   if (!src) return `https://picsum.photos/seed/${encodeURIComponent(seed || "cat")}/800`;
@@ -27,7 +28,9 @@ export default async function CategoriesPage() {
       <h1 className="text-2xl font-bold text-pink-600 mb-6">دسته‌بندی‌ها</h1>
 
       {items.length === 0 ? (
-        <p className="text-zinc-600">فعلاً دسته‌بندی نداریم—از پنل ادمین اضافه کن و صفحه را رفرش کن.</p>
+        <p className="text-zinc-600">
+          فعلاً دسته‌بندی نداریم—از پنل ادمین اضافه کن و صفحه را رفرش کن.
+        </p>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {items.map((c) => (

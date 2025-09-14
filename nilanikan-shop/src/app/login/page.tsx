@@ -3,13 +3,14 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { API_BASE } from "@/lib/api"; // ✅ استفاده از API_BASE مرکزی
 
 type Mode = "password" | "otp";
 
 function ActualLoginPage() {
   const router = useRouter();
   const params = useSearchParams();
-const next = params?.get("next") ?? "/";
+  const next = params?.get("next") ?? "/";
 
   const [mode, setMode] = useState<Mode>("password");
   const [phone, setPhone] = useState("");
@@ -30,8 +31,7 @@ const next = params?.get("next") ?? "/";
       const raw = localStorage.getItem("user");
       if (raw) router.replace(next);
     } catch {}
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [next, router]);
 
   const validPhone = (p: string) => /^09\d{9}$/.test(p);
 
@@ -42,15 +42,15 @@ const next = params?.get("next") ?? "/";
     router.replace(next);
   };
 
-  // ورود با رمز (سمت‌کلاینتِ ساده؛ اگر بک‌اند دارید به جای آن fetch بزنید)
+  // ورود با رمز عبور — نسخه واقعی با بک‌اند
   const loginWithPassword = async () => {
     setErr("");
     if (!validPhone(faPhone)) return setErr("شماره موبایل معتبر نیست.");
     if (!password.trim()) return setErr("رمز عبور را وارد کنید.");
     try {
       setBusy(true);
-      // اگر بک‌اند دارید اینجا کال واقعی بزنید
-      // const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000"}/api/auth/login/`, {
+      // نسخه واقعی:
+      // const res = await fetch(`${API_BASE}/api/auth/login/`, {
       //   method: "POST",
       //   headers: { "Content-Type": "application/json" },
       //   credentials: "include",
@@ -60,7 +60,7 @@ const next = params?.get("next") ?? "/";
       // const u = await res.json();
       // finishLogin({ fullName: u?.full_name, phone: u?.phone || faPhone });
 
-      // نسخه‌ی ساده‌ی بدون بک‌اند:
+      // نسخه دموی بدون بک‌اند:
       await new Promise((r) => setTimeout(r, 500));
       finishLogin({ fullName: "کاربر", phone: faPhone });
     } catch (e: any) {
@@ -70,14 +70,18 @@ const next = params?.get("next") ?? "/";
     }
   };
 
-  // ورود با کد یکبارمصرف (OTP) — دموی ساده
+  // درخواست کد OTP
   const requestOtp = async () => {
     setErr("");
     if (!validPhone(faPhone)) return setErr("شماره موبایل معتبر نیست.");
     try {
       setBusy(true);
-      // کال بک‌اند واقعی:
-      // await fetch(`${API_BASE}/api/auth/otp/request/`, { method: "POST", body: JSON.stringify({ phone: faPhone }) });
+      // نسخه واقعی:
+      // await fetch(`${API_BASE}/api/auth/otp/request/`, {
+      //   method: "POST",
+      //   headers: { "Content-Type": "application/json" },
+      //   body: JSON.stringify({ phone: faPhone }),
+      // });
       await new Promise((r) => setTimeout(r, 500));
       setStep("verify");
     } catch {
@@ -87,13 +91,18 @@ const next = params?.get("next") ?? "/";
     }
   };
 
+  // تایید کد OTP
   const verifyOtp = async () => {
     setErr("");
     if (!otp.trim()) return setErr("کد تایید را وارد کنید.");
     try {
       setBusy(true);
-      // کال بک‌اند واقعی:
-      // const res = await fetch(`${API_BASE}/api/auth/otp/verify/`, { method: "POST", body: JSON.stringify({ phone: faPhone, code: otp }) });
+      // نسخه واقعی:
+      // const res = await fetch(`${API_BASE}/api/auth/otp/verify/`, {
+      //   method: "POST",
+      //   headers: { "Content-Type": "application/json" },
+      //   body: JSON.stringify({ phone: faPhone, code: otp }),
+      // });
       // if (!res.ok) throw new Error("کد نامعتبر است");
       await new Promise((r) => setTimeout(r, 500));
       finishLogin({ fullName: "کاربر", phone: faPhone });
@@ -116,7 +125,11 @@ const next = params?.get("next") ?? "/";
             setStep("enter");
             setErr("");
           }}
-          className={`h-10 rounded-xl border ${mode === "password" ? "bg-pink-600 text-white border-pink-600" : "border-zinc-200"}`}
+          className={`h-10 rounded-xl border ${
+            mode === "password"
+              ? "bg-pink-600 text-white border-pink-600"
+              : "border-zinc-200"
+          }`}
         >
           ورود با رمز
         </button>
@@ -126,7 +139,11 @@ const next = params?.get("next") ?? "/";
             setStep("enter");
             setErr("");
           }}
-          className={`h-10 rounded-xl border ${mode === "otp" ? "bg-pink-600 text-white border-pink-600" : "border-zinc-200"}`}
+          className={`h-10 rounded-xl border ${
+            mode === "otp"
+              ? "bg-pink-600 text-white border-pink-600"
+              : "border-zinc-200"
+          }`}
         >
           ورود با کد تایید
         </button>
@@ -203,7 +220,8 @@ const next = params?.get("next") ?? "/";
 
       {/* لینک جایگزین */}
       <p className="text-xs text-zinc-500 mt-4">
-        پس از ورود، به <span className="font-semibold text-zinc-700">{next}</span> منتقل می‌شوید.
+        پس از ورود، به{" "}
+        <span className="font-semibold text-zinc-700">{next}</span> منتقل می‌شوید.
       </p>
     </div>
   );

@@ -4,13 +4,16 @@
 import SafeImg from "@/components/SafeImg";
 import Link from "next/link";
 import type { BannerItem } from "@/types/home";
+import { API_BASE } from "@/lib/api"; // ✅ استفاده از API_BASE مرکزی
 
-const API_ORIGIN = (process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000")
-  .replace(/\/$/, "")
-  .replace(/\/api$/, "");
+// اطمینان از حذف / یا /api اضافی در انتهای آدرس
+const API_ORIGIN = API_BASE.replace(/\/$/, "").replace(/\/api$/, "");
 
 function resolveImage(src?: string | null, seed?: string) {
-  if (!src) return `https://picsum.photos/seed/${encodeURIComponent(seed || "banner")}/1200/600`;
+  if (!src)
+    return `https://picsum.photos/seed/${encodeURIComponent(
+      seed || "banner"
+    )}/1200/600`;
   return /^https?:\/\//i.test(src) ? src : `${API_ORIGIN}${src}`;
 }
 
