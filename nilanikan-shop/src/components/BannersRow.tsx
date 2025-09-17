@@ -1,20 +1,27 @@
-// src/components/BannersRow.tsx
 "use client";
 
 import SafeImg from "@/components/SafeImg";
 import Link from "next/link";
 import type { BannerItem } from "@/types/home";
-import { API_BASE } from "@/lib/api"; // ✅ استفاده از API_BASE مرکزی
+import { API_BASE } from "@/lib/api";
 
-// اطمینان از حذف / یا /api اضافی در انتهای آدرس
+// دامنهٔ اصلی (بدون /api انتهایی)
 const API_ORIGIN = API_BASE.replace(/\/$/, "").replace(/\/api$/, "");
 
-function resolveImage(src?: string | null, seed?: string) {
-  if (!src)
-    return `https://picsum.photos/seed/${encodeURIComponent(
-      seed || "banner"
-    )}/1200/600`;
-  return /^https?:\/\//i.test(src) ? src : `${API_ORIGIN}${src}`;
+// ✅ آدرس تصویر را به‌درستی بساز (چه مطلق باشد چه نسبی)
+function resolveImage(src?: string | null) {
+  if (!src) return "";
+
+  // اگر آدرس از قبل کامل (http یا https) بود همان را برگردان
+  if (/^https?:\/\//i.test(src)) return src;
+
+  // اگر آدرس با / شروع می‌شود یعنی از ریشه‌ی دامنه است → فقط دامنه را بچسبان
+  if (src.startsWith("/")) {
+    return `${API_ORIGIN}${src}`;
+  }
+
+  // در غیر این صورت رشته را مستقیماً بعد از دامنه بگذار
+  return `${API_ORIGIN}/${src}`;
 }
 
 type Props = { items?: BannerItem[] };
@@ -27,7 +34,8 @@ export default function BannersRow({ items = [] }: Props) {
   return (
     <div className="py-8 grid grid-cols-1 md:grid-cols-2 gap-4">
       {list.map((b, idx) => {
-        const src = resolveImage(b.imageUrl, String(b.id ?? idx + 1));
+        const src = resolveImage(b.imageUrl);
+        if (!src) return null; // اگر تصویر نبود، چیزی نمایش نده
         const content = (
           <div className="banner-card block overflow-hidden rounded-2xl ring-1 ring-zinc-100">
             <SafeImg

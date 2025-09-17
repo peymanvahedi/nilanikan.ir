@@ -21,6 +21,16 @@ function toFa(n: number) {
   return n.toLocaleString("fa-IR");
 }
 
+/** فقط اگر آیتم واقعاً تصویر دارد */
+function hasImg(p: any): boolean {
+  if (!p) return false;
+  if (p.imageUrl) return true;
+  if (p.image) return true;
+  if (Array.isArray(p.images) && p.images.some((x: any) => !!x)) return true;
+  if (Array.isArray(p.gallery) && p.gallery.some((g: any) => !!g?.image)) return true;
+  return false;
+}
+
 export default function ProductsGrid({
   items,
   hrefBase = "/product",
@@ -136,18 +146,20 @@ export default function ProductsGrid({
                 <div className="mt-4 h-4 w-1/3 rounded bg-zinc-100" />
               </div>
             ))
-          : sorted.map((it, i) => (
-              <ProductCard
-                key={(it.slug ?? it.id ?? i) as any}
-                item={it}
-                hrefBase={hrefBase}
-                className="h-full"
-                // روبان و برچسب نمونه؛ در صورت نیاز مقدار بده
-                ribbon={it?.ribbon as any}            // مثل: "پرفروش"
-                ribbonTone={it?.ribbonTone as any}    // "pink" | "emerald" | "zinc"
-                tag={it?.tag as any}                  // مثل: "آگهی" یا "جدید"
-              />
-            ))}
+          : sorted.map((it, i) =>
+              hasImg(it) ? (
+                <ProductCard
+                  key={(it.slug ?? it.id ?? i) as any}
+                  item={it}
+                  hrefBase={hrefBase}
+                  className="h-full"
+                  // روبان و برچسب نمونه؛ در صورت نیاز مقدار بده
+                  ribbon={it?.ribbon as any}            // مثل: "پرفروش"
+                  ribbonTone={it?.ribbonTone as any}    // "pink" | "emerald" | "zinc"
+                  tag={it?.tag as any}                  // مثل: "آگهی" یا "جدید"
+                />
+              ) : null
+            )}
       </div>
     </section>
   );

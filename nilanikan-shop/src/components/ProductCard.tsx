@@ -1,18 +1,12 @@
-// src/components/ProductCard.tsx
 "use client";
 
 import Image from "next/image";
 import Link from "next/link";
 import { absolutizeMedia } from "@/lib/api";
 
-/** مقادیر متنی که ممکن است false هم باشند (برای عبارت‌های شرطی) */
 type MaybeStr = string | null | undefined | false;
+type BaseMedia = MaybeStr | { image?: MaybeStr; [k: string]: any };
 
-type BaseMedia =
-  | MaybeStr
-  | { image?: MaybeStr; [k: string]: any };
-
-/** آیتم عمومی */
 export type ProductLike = {
   id?: number | string;
   slug?: string;
@@ -25,14 +19,11 @@ export type ProductLike = {
   images?: MaybeStr[] | null;
   gallery?: BaseMedia[] | null;
   href?: string;
-
-  // برای نمایش پیشرفته (اختیاری)
-  ribbon?: string;                 // متن روبان گوشه (مثل "پرفروش")
+  ribbon?: string;
   ribbonTone?: "pink" | "emerald" | "zinc";
-  tag?: string;                    // برچسب کوچک بالای تصویر (مثل "آگهی" یا "جدید")
+  tag?: string;
 };
 
-/** پراپ‌های تخت */
 export type ProductCardFlatProps = {
   id?: number | string;
   slug?: string;
@@ -46,14 +37,11 @@ export type ProductCardFlatProps = {
   images?: MaybeStr[] | null;
   gallery?: BaseMedia[] | null;
   className?: string;
-
-  // نمایش پیشرفته
   ribbon?: string;
   ribbonTone?: "pink" | "emerald" | "zinc";
   tag?: string;
 };
 
-/** حالت آیتم + پیشوند لینک */
 export type ProductCardItemProps = {
   item: ProductLike;
   hrefBase?: string | false;
@@ -71,20 +59,16 @@ function resolveImage(
   imageUrl?: MaybeStr,
   image?: MaybeStr,
   images?: (MaybeStr)[] | null,
-  gallery?: (BaseMedia)[] | null,
-  seed?: string
+  gallery?: (BaseMedia)[] | null
 ) {
   const firstGallery = Array.isArray(gallery) && gallery[0] && (gallery[0] as any).image;
-
   const candidate =
     normalizeStr(imageUrl) ??
     normalizeStr(Array.isArray(images) ? images[0] : undefined) ??
     normalizeStr(firstGallery as MaybeStr) ??
     normalizeStr(image);
-
   const absolute = absolutizeMedia(candidate);
-  if (absolute) return absolute;
-  return `https://picsum.photos/seed/${encodeURIComponent(seed || "card")}/600/750`;
+  return absolute; // ⛔️ بدون هیچ fallback
 }
 
 function toFa(n: number) {
@@ -105,7 +89,6 @@ function ribbonToneClasses(tone?: "pink" | "emerald" | "zinc") {
 
 /* -------------------- Component -------------------- */
 export default function ProductCard(props: ProductCardProps) {
-  // نرمال‌سازی پراپ‌ها برای هر دو حالت
   const flat: ProductCardFlatProps =
     "item" in props
       ? {
@@ -163,29 +146,23 @@ export default function ProductCard(props: ProductCardProps) {
   const hasOff = p != null && dp != null && dp < p;
   const off = hasOff ? Math.round((1 - (dp as number) / (p as number)) * 100) : 0;
 
-  const src = resolveImage(
-    imageUrl,
-    image,
-    images ?? undefined,
-    gallery ?? undefined,
-    String(slug ?? id ?? name)
-  );
+  const src = resolveImage(imageUrl, image, images ?? undefined, gallery ?? undefined);
 
   return (
     <Link
-      href={fallbackHref}
-      className={`relative block rounded-2xl border border-zinc-200 bg-white p-3 hover:shadow-sm transition ${className}`}
-      aria-label={name}
-    >
+  href={fallbackHref}
+  className={`relative block rounded-2xl border border-zinc-200 bg-white p-3 hover:shadow-sm transition ${className}`}
+  aria-label={name}
+  data-testid="product-card"
+>
+
       <div className="relative aspect-[4/5] w-full overflow-hidden rounded-xl ring-1 ring-zinc-100">
-        {/* برچسب کوچک بالا-چپ (مثلا «آگهی») */}
         {tag && (
           <span className="absolute left-2 top-2 z-10 rounded-md bg-white/90 px-2 py-0.5 text-[10px] font-bold text-pink-600 ring-1 ring-pink-100">
             {tag}
           </span>
         )}
 
-        {/* روبان بالا-راست (مثلا «پرفروش») */}
         {ribbon && (
           <span
             className={`absolute right-0 top-2 z-10 rounded-l-xl px-2 py-1 text-[11px] font-extrabold ${ribbonToneClasses(
@@ -196,13 +173,17 @@ export default function ProductCard(props: ProductCardProps) {
           </span>
         )}
 
-        <Image
-          src={src || "/placeholder.svg"}
-          alt={name}
-          fill
-          className="object-cover"
-          sizes="(min-width:1024px) 240px, 70vw"
-        />
+        {/* ⛔️ فقط اگر تصویر واقعی داریم */}
+        {src && (
+          <Image
+            src={src}
+            alt={name}
+            fill
+            className="object-cover"
+            sizes="(min-width:1024px) 240px, 70vw"
+            unoptimized
+          />
+        )}
       </div>
 
       <div className="mt-3 space-y-1">
@@ -221,7 +202,7 @@ export default function ProductCard(props: ProductCardProps) {
                 <del className="text-xs text-zinc-400">{toFa(p)}</del>
               )}
             </div>
-            <div className="text-pink-600 font-extrabود">
+            <div className="text-pink-600 font-extrabold">
               {toFa(Number(dp ?? p ?? 0))}
               <span className="text-[11px] mr-1">تومان</span>
             </div>

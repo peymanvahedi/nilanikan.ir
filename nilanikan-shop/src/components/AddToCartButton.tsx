@@ -64,14 +64,16 @@ export default function AddToCartButton(props: Props) {
   return (
     <>
       <button
-        onClick={addLine}
-        disabled={props.disabled || busy} // بررسی disabled
-        aria-busy={busy}
-        className={
-          props.className ??
-          "h-12 w-full rounded-xl bg-pink-600 font-bold text-white hover:bg-pink-700 transition disabled:opacity-60 disabled:cursor-not-allowed"
-        }
-      >
+  data-testid="add-to-cart"
+  onClick={addLine}
+  disabled={props.disabled || busy}
+  aria-busy={busy}
+  className={
+    props.className ??
+    "h-12 w-full rounded-xl bg-pink-600 font-bold text-white hover:bg-pink-700 transition disabled:opacity-60 disabled:cursor-not-allowed"
+  }
+>
+
         {busy ? "در حال افزودن..." : props.children || "افزودن به سبد خرید 🛒"}
       </button>
 

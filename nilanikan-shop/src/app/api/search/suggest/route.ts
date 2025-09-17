@@ -2,44 +2,40 @@
 import { NextResponse } from "next/server";
 
 /**
- * این route سعی می‌کند از lib/api (`get` و `endpoints.products`) استفاده کند.
- * اگر lib/api موجود نباشد، به صورت fallback از NEXT_PUBLIC_API_BASE/products?search=... استفاده می‌کند.
- *
- * خروجی: { results: [...] } یا آرایهٔ ساده. آیتم‌ها باید حداقل یکی از فیلدهای: title/name, slug/href, image, price داشته باشند.
+ * خروجی: { results: [...] }
+ * تلاش می‌کند از lib/api استفاده کند؛ در غیر اینصورت به NEXT_PUBLIC_API_BASE سقوط می‌کند.
  */
-
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const q = String(url.searchParams.get("q") ?? "").trim();
-    if (!q || q.length < 1) return NextResponse.json({ results: [] });
+    if (!q) return NextResponse.json({ results: [] });
 
     // Try using project's lib/api if exists
     try {
-      // dynamic import to avoid build errors if lib/api doesn't exist
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
       const mod = await import("@/lib/api");
-      const { get, endpoints, buildQuery } = mod;
-      if (get && endpoints && endpoints.products) {
-        // build query in same format as search page expects
+      const { get, endpoints, buildQuery } = mod as any;
+      if (get && endpoints?.products) {
         const query = buildQuery ? buildQuery({ page: 1, limit: 8, search: q }) : `?search=${encodeURIComponent(q)}&limit=8&page=1`;
         const data = await get(`${endpoints.products}${query}`, { throwOnHTTP: false, fallback: { results: [] } });
-        const items = Array.isArray(data) ? data : data.results ?? data.items ?? [];
+        const items = Array.isArray(data) ? data : data?.results ?? data?.items ?? data?.data ?? [];
         return NextResponse.json({ results: items });
       }
-    } catch (e) {
-      // ignore and fallback to direct fetch below
+    } catch {
+      // ignore and fallback
     }
 
-    // Fallback: try public API base
+    // Fallback: public API
     const apiBase = process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") ?? "";
     if (!apiBase) return NextResponse.json({ results: [] });
 
-    const target = `${apiBase}/products?search=${encodeURIComponent(q)}&limit=8&page=1`;
-    const r = await fetch(target, { cache: "no-store" });
+    const r = await fetch(`${apiBase}/products?search=${encodeURIComponent(q)}&limit=8&page=1`, {
+      cache: "no-store",
+      headers: { Accept: "application/json" },
+    });
     if (!r.ok) return NextResponse.json({ results: [] }, { status: r.status });
     const json = await r.json();
-    const items = Array.isArray(json) ? json : json.results ?? json.items ?? [];
+    const items = Array.isArray(json) ? json : json?.results ?? json?.items ?? json?.data ?? [];
     return NextResponse.json({ results: items });
   } catch (err) {
     console.error("search.suggest error:", err);

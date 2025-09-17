@@ -1,4 +1,3 @@
-# catalog/serializers.py
 import os
 from typing import Optional, Tuple
 from rest_framework import serializers
@@ -6,10 +5,12 @@ from .models import (
     Category,
     Product,
     ProductImage,
+    ProductVideo,   # ← اضافه شد
     Bundle,
     BundleImage,
+    BundleVideo,    # ← اضافه شد
     AttributeValue,
-    ProductVariant,  # ← اضافه شد
+    ProductVariant,
 )
 from stories.models import Story
 
@@ -50,11 +51,42 @@ def safe_file_url(f) -> str:
     return ""
 
 
-# ------------------------- Category -------------------------
+# ------------------------- Category (General) -------------------------
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
         fields = ["id", "name", "slug", "description", "parent"]
+
+
+# ------------------------- Category (Detail for Frontend page header) -------------------------
+class CategoryDetailSerializer(serializers.ModelSerializer):
+    icon = serializers.SerializerMethodField()
+    image = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Category
+        fields = ["id", "name", "slug", "description", "parent", "icon", "image"]
+
+    def get_icon(self, obj):
+        req = self.context.get("request")
+        return abs_url(req, safe_file_url(getattr(obj, "icon", None))) or ""
+
+    def get_image(self, obj):
+        req = self.context.get("request")
+        return abs_url(req, safe_file_url(getattr(obj, "image", None))) or ""
+
+
+# ------------------------- Category (Menu Tree) -------------------------
+class MenuCategorySerializer(serializers.ModelSerializer):
+    children = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Category
+        fields = ["id", "name", "slug", "icon", "image", "children"]
+
+    def get_children(self, obj):
+        qs = obj.children.filter(is_active=True, show_in_menu=True).order_by("menu_order", "name")
+        return MenuCategorySerializer(qs, many=True, context=self.context).data
 
 
 # ------------------------- Attribute Values -------------------------
@@ -79,6 +111,26 @@ class ProductImageSerializer(serializers.ModelSerializer):
         return abs_url(req, safe_file_url(getattr(obj, "image", None)))
 
 
+# ------------------------- Product Videos -------------------------
+class ProductVideoSerializer(serializers.ModelSerializer):
+    url = serializers.SerializerMethodField()
+    thumbnailUrl = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProductVideo
+        fields = ["id", "title", "url", "thumbnailUrl", "order", "is_primary", "created_at"]
+
+    def get_url(self, obj):
+        req = self.context.get("request")
+        if getattr(obj, "file", None):
+            return abs_url(req, safe_file_url(obj.file))
+        return obj.external_url or ""
+
+    def get_thumbnailUrl(self, obj):
+        req = self.context.get("request")
+        return abs_url(req, safe_file_url(getattr(obj, "thumbnail", None))) or ""
+
+
 # ------------------------- Product Variants -------------------------
 class ProductVariantSerializer(serializers.ModelSerializer):
     size = AttributeValueSerializer()
@@ -92,19 +144,20 @@ class ProductVariantSerializer(serializers.ModelSerializer):
 class ProductSerializer(serializers.ModelSerializer):
     image = serializers.SerializerMethodField()
     gallery = ProductImageSerializer(many=True, read_only=True)
+    videos = ProductVideoSerializer(many=True, read_only=True)  # ← اضافه شد
     is_recommended = serializers.BooleanField(read_only=False)
     attributes = AttributeValueSerializer(many=True, read_only=True)
-    variants = ProductVariantSerializer(many=True, read_only=True)  # ← اضافه شد
+    variants = ProductVariantSerializer(many=True, read_only=True)
 
     class Meta:
         model = Product
         fields = [
             "id", "name", "slug", "sku", "category",
             "price", "discount_price", "description",
-            "image", "gallery",
+            "image", "gallery", "videos",    # ← ویدیوها
             "stock", "is_active", "is_recommended", "created_at",
             "attributes", "size_chart",
-            "variants",  # ← اضافه شد
+            "variants",
         ]
 
     def get_image(self, obj):
@@ -180,10 +233,31 @@ class BundleImageSerializer(serializers.ModelSerializer):
         return abs_url(req, safe_file_url(getattr(obj, "image", None)))
 
 
+# ------------------------- Bundle Videos -------------------------
+class BundleVideoSerializer(serializers.ModelSerializer):
+    url = serializers.SerializerMethodField()
+    thumbnailUrl = serializers.SerializerMethodField()
+
+    class Meta:
+        model = BundleVideo
+        fields = ["id", "title", "url", "thumbnailUrl", "order", "is_primary", "created_at"]
+
+    def get_url(self, obj):
+        req = self.context.get("request")
+        if getattr(obj, "file", None):
+            return abs_url(req, safe_file_url(obj.file))
+        return obj.external_url or ""
+
+    def get_thumbnailUrl(self, obj):
+        req = self.context.get("request")
+        return abs_url(req, safe_file_url(getattr(obj, "thumbnail", None))) or ""
+
+
 # ------------------------- Bundle -------------------------
 class BundleSerializer(serializers.ModelSerializer):
     products = ProductItemSerializer(many=True, read_only=True)
     gallery = BundleImageSerializer(many=True, read_only=True)
+    videos = BundleVideoSerializer(many=True, read_only=True)  # ← اضافه شد
     image = serializers.SerializerMethodField()
     images = serializers.SerializerMethodField()
     is_recommended = serializers.BooleanField(read_only=False)
@@ -192,7 +266,7 @@ class BundleSerializer(serializers.ModelSerializer):
         model = Bundle
         fields = [
             "id", "title", "slug",
-            "products", "bundle_price", "image", "gallery", "images",
+            "products", "bundle_price", "image", "gallery", "images", "videos",  # ← ویدیوها
             "active", "is_recommended", "created_at",
         ]
 

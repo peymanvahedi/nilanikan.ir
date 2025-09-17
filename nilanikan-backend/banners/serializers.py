@@ -1,11 +1,10 @@
-# banners/serializers.py
 from rest_framework import serializers
-from .models import Slide, Banner  # فرض بر این‌که Banner هم توی همین app هست
+from .models import Slide, Banner  # فرض بر این که Banner هم توی همین app هست
+
 
 class SlideSerializer(serializers.ModelSerializer):
-    # فرانت `link` می‌خواهد (نه href)
-    link = serializers.CharField(source="link", required=False, allow_blank=True)
-    # فرانت `imageUrl` می‌خواهد
+    # فرانت فیلد link و imageUrl می‌خواهد
+    link = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     imageUrl = serializers.SerializerMethodField()
 
     class Meta:
@@ -18,11 +17,12 @@ class SlideSerializer(serializers.ModelSerializer):
         except Exception:
             return ""
 
+
 class BannerSerializer(serializers.ModelSerializer):
-    # کلیدهای موردنیاز فرانت
-    imageUrl = serializers.SerializerMethodField()
-    link = serializers.CharField(source="link", required=False, allow_blank=True, allow_null=True)
+    # فرانت فیلدهای زیر را می‌خواهد
+    link = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     subtitle = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    imageUrl = serializers.SerializerMethodField()
 
     class Meta:
         model = Banner

@@ -5,8 +5,8 @@ import { useMemo } from "react";
 
 export type AttributeValue = {
   id: number;
-  attribute: string;     // مثل "Color", "Size"
-  value: string;         // مثل "Red", "M"
+  attribute: string;     // مثلا "Color" یا "Size"
+  value: string;         // مثلا "Red" یا "M"
   slug: string;
   color_code?: string | null;
 };
@@ -51,6 +51,7 @@ export default function AttributePicker({
                 <button
                   key={av.id}
                   type="button"
+                  data-testid="product-option" // اضافه شده برای تست
                   onClick={() => setPick(attrName, av)}
                   className={[
                     "h-9 rounded-lg px-3 text-xs font-bold border transition",

@@ -1,0 +1,295 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e3]:
+      - text: ارسال رایگان اولین خرید با کد
+      - generic [ref=e4]: summer04
+    - generic [ref=e5]:
+      - link "نیلانیکان" [ref=e6] [cursor=pointer]:
+        - /url: /
+      - generic [ref=e7]:
+        - textbox "جست‌وجو..." [ref=e8]
+        - img [ref=e10]
+      - generic [ref=e12]:
+        - link "سبد خرید" [ref=e13] [cursor=pointer]:
+          - /url: /cart
+          - img [ref=e14] [cursor=pointer]
+        - link "حساب کاربری" [ref=e18] [cursor=pointer]:
+          - /url: /account
+          - img [ref=e19] [cursor=pointer]
+    - navigation [ref=e22]:
+      - link "سذ" [ref=e24] [cursor=pointer]:
+        - /url: /category/sth
+  - main [ref=e25]:
+    - main [ref=e26]:
+      - generic [ref=e27]:
+        - region "اسلایدر هدر" [ref=e28]:
+          - region "اسلایدر" [ref=e29]:
+            - generic [ref=e30]:
+              - generic [ref=e31]:
+                - img "ثفتث" [ref=e33]
+                - img "سصقب" [ref=e35]
+              - generic [ref=e36]:
+                - button "اسلاید 1" [ref=e37]
+                - button "اسلاید 2" [ref=e38]
+        - region "استوری‌ها" [ref=e39]:
+          - heading "🌟 تن‌خور بچه‌هایی که از ما خرید کردن" [level=2] [ref=e40]:
+            - generic [ref=e41]: 🌟
+            - text: تن‌خور بچه‌هایی که از ما خرید کردن
+          - generic [ref=e42]:
+            - button "سحر 3 ساله از رشت سحر 3 ساله از رشت" [ref=e44]:
+              - generic [ref=e45]:
+                - img "سحر 3 ساله از رشت" [ref=e46]
+                - paragraph [ref=e48]: سحر 3 ساله از رشت
+            - button "علی 2 ساله از مشهد علی 2 ساله از مشهد" [ref=e50]:
+              - generic [ref=e51]:
+                - img "علی 2 ساله از مشهد" [ref=e52]
+                - paragraph [ref=e54]: علی 2 ساله از مشهد
+            - button "زهرا 5 ساله از تهران زهرا 5 ساله از تهران" [ref=e56]:
+              - generic [ref=e57]:
+                - img "زهرا 5 ساله از تهران" [ref=e58]
+                - paragraph [ref=e60]: زهرا 5 ساله از تهران
+        - region "پیشنهادهای VIP" [ref=e61]:
+          - region "پیشنهادهای VIP" [ref=e62]:
+            - generic [ref=e63]:
+              - heading "پیشنهادهای VIP" [level=2] [ref=e64]
+              - link "مشاهده همه" [ref=e66] [cursor=pointer]:
+                - /url: /products?recommended=1
+            - generic [ref=e68]:
+              - article [ref=e69]:
+                - link "کت شلوار پسرانه کرم کد 947 VIP کت شلوار پسرانه کرم کد 947 ۵٬۰۰۰ تومان" [ref=e70] [cursor=pointer]:
+                  - /url: /product/gdd
+                  - generic [ref=e71] [cursor=pointer]:
+                    - img "کت شلوار پسرانه کرم کد 947" [ref=e72] [cursor=pointer]
+                    - generic [ref=e73] [cursor=pointer]: VIP
+                  - generic [ref=e74] [cursor=pointer]:
+                    - heading "کت شلوار پسرانه کرم کد 947" [level=3] [ref=e75] [cursor=pointer]
+                    - generic [ref=e76] [cursor=pointer]: ۵٬۰۰۰ تومان
+              - article [ref=e77]:
+                - link "شلوارک مشکی پاکتی 943 VIP شلوارک مشکی پاکتی 943 ۴۰٬۰۰۰ تومان" [ref=e78] [cursor=pointer]:
+                  - /url: /product/tst-2
+                  - generic [ref=e79] [cursor=pointer]:
+                    - img "شلوارک مشکی پاکتی 943" [ref=e80] [cursor=pointer]
+                    - generic [ref=e81] [cursor=pointer]: VIP
+                  - generic [ref=e82] [cursor=pointer]:
+                    - heading "شلوارک مشکی پاکتی 943" [level=3] [ref=e83] [cursor=pointer]
+                    - generic [ref=e84] [cursor=pointer]: ۴۰٬۰۰۰ تومان
+              - article [ref=e85]:
+                - link "ست شلوار دوم 2530 VIP ست شلوار دوم 2530 ۳۰۰٬۰۰۰ تومان" [ref=e86] [cursor=pointer]:
+                  - /url: /bundle/st-shlor-dom-2530
+                  - generic [ref=e87] [cursor=pointer]:
+                    - img "ست شلوار دوم 2530" [ref=e88] [cursor=pointer]
+                    - generic [ref=e89] [cursor=pointer]: VIP
+                  - generic [ref=e90] [cursor=pointer]:
+                    - heading "ست شلوار دوم 2530" [level=3] [ref=e91] [cursor=pointer]
+                    - generic [ref=e92] [cursor=pointer]: ۳۰۰٬۰۰۰ تومان
+        - region "ست‌ها و پافر" [ref=e93]:
+          - generic [ref=e94]:
+            - generic [ref=e95]:
+              - heading "ست‌ها و پافر" [level=2] [ref=e96]
+              - link "مشاهده همه" [ref=e97] [cursor=pointer]:
+                - /url: /collection/set
+            - generic [ref=e98]:
+              - link "ست شلوار دوم 2530" [active] [ref=e99] [cursor=pointer]:
+                - /url: /bundle/st-shlor-dom-2530
+                - generic [ref=e100] [cursor=pointer]:
+                  - generic [ref=e101] [cursor=pointer]: پربازدید
+                  - img "ست شلوار دوم 2530" [ref=e102] [cursor=pointer]
+                - generic [ref=e103] [cursor=pointer]:
+                  - heading "ست شلوار دوم 2530" [level=3] [ref=e104] [cursor=pointer]
+                  - generic [ref=e105] [cursor=pointer]:
+                    - text: ۳٬۰۰۰٬۰۰۰
+                    - generic [ref=e106] [cursor=pointer]: تومان
+              - link "ست شلوار و هودی 1520" [ref=e107] [cursor=pointer]:
+                - /url: /bundle/st-shlor-o-hod-1520
+                - generic [ref=e108] [cursor=pointer]:
+                  - generic [ref=e109] [cursor=pointer]: پربازدید
+                  - img "ست شلوار و هودی 1520" [ref=e110] [cursor=pointer]
+                - generic [ref=e111] [cursor=pointer]:
+                  - heading "ست شلوار و هودی 1520" [level=3] [ref=e112] [cursor=pointer]
+                  - generic [ref=e113] [cursor=pointer]:
+                    - text: ۵٬۰۰۰٬۰۰۰
+                    - generic [ref=e114] [cursor=pointer]: تومان
+        - region "تن‌خور کوچک بچه‌ها" [ref=e115]
+        - region "پرفروش‌ترین‌ها" [ref=e117]:
+          - region "پرفروش‌ترین‌ها" [ref=e118]:
+            - generic [ref=e119]:
+              - heading "پرفروش‌ترین‌ها" [level=2] [ref=e120]
+              - link "مشاهده همه" [ref=e122] [cursor=pointer]:
+                - /url: /bestsellers
+            - generic [ref=e124]:
+              - article [ref=e125]:
+                - link "پرفروش هودی بیسکوبیتی ۵۰٬۰۰۰ تومان" [ref=e126] [cursor=pointer]:
+                  - /url: /product/hod-bsobt
+                  - generic [ref=e128] [cursor=pointer]: پرفروش
+                  - generic [ref=e129] [cursor=pointer]:
+                    - heading "هودی بیسکوبیتی" [level=3] [ref=e130] [cursor=pointer]
+                    - generic [ref=e131] [cursor=pointer]: ۵۰٬۰۰۰ تومان
+              - article [ref=e132]:
+                - link "کت شلوار پسرانه کرم کد 947 پرفروش %۲۰- کت شلوار پسرانه کرم کد 947 ۴۰٬۰۰۰ تومان ۵۰٬۰۰۰ تومان" [ref=e133] [cursor=pointer]:
+                  - /url: /product/gdd
+                  - generic [ref=e134] [cursor=pointer]:
+                    - img "کت شلوار پسرانه کرم کد 947" [ref=e135] [cursor=pointer]
+                    - generic [ref=e136] [cursor=pointer]: پرفروش
+                    - generic [ref=e137] [cursor=pointer]: "%۲۰-"
+                  - generic [ref=e138] [cursor=pointer]:
+                    - heading "کت شلوار پسرانه کرم کد 947" [level=3] [ref=e139] [cursor=pointer]
+                    - generic [ref=e140] [cursor=pointer]: ۴۰٬۰۰۰ تومان
+                    - generic [ref=e141] [cursor=pointer]: ۵۰٬۰۰۰ تومان
+              - article [ref=e142]:
+                - link "شلوارک مشکی پاکتی 943 پرفروش %۲۵- شلوارک مشکی پاکتی 943 ۳۰۰٬۰۰۰ تومان ۴۰۰٬۰۰۰ تومان" [ref=e143] [cursor=pointer]:
+                  - /url: /product/tst-2
+                  - generic [ref=e144] [cursor=pointer]:
+                    - img "شلوارک مشکی پاکتی 943" [ref=e145] [cursor=pointer]
+                    - generic [ref=e146] [cursor=pointer]: پرفروش
+                    - generic [ref=e147] [cursor=pointer]: "%۲۵-"
+                  - generic [ref=e148] [cursor=pointer]:
+                    - heading "شلوارک مشکی پاکتی 943" [level=3] [ref=e149] [cursor=pointer]
+                    - generic [ref=e150] [cursor=pointer]: ۳۰۰٬۰۰۰ تومان
+                    - generic [ref=e151] [cursor=pointer]: ۴۰۰٬۰۰۰ تومان
+              - article [ref=e152]:
+                - link "هودی شلوار و پافر شمعی مشکی کد 2839 پرفروش %۱۳- هودی شلوار و پافر شمعی مشکی کد 2839 ۷۰٬۰۰۰ تومان ۸۰٬۰۰۰ تومان" [ref=e153] [cursor=pointer]:
+                  - /url: /product/thththth
+                  - generic [ref=e154] [cursor=pointer]:
+                    - img "هودی شلوار و پافر شمعی مشکی کد 2839" [ref=e155] [cursor=pointer]
+                    - generic [ref=e156] [cursor=pointer]: پرفروش
+                    - generic [ref=e157] [cursor=pointer]: "%۱۳-"
+                  - generic [ref=e158] [cursor=pointer]:
+                    - heading "هودی شلوار و پافر شمعی مشکی کد 2839" [level=3] [ref=e159] [cursor=pointer]
+                    - generic [ref=e160] [cursor=pointer]: ۷۰٬۰۰۰ تومان
+                    - generic [ref=e161] [cursor=pointer]: ۸۰٬۰۰۰ تومان
+              - article [ref=e162]:
+                - link "تیشرت بیسکویتی سه خط 938 پرفروش %۷۸- تیشرت بیسکویتی سه خط 938 ۲۰٬۰۰۰ تومان ۹۰٬۰۰۰ تومان" [ref=e163] [cursor=pointer]:
+                  - /url: /product/lds
+                  - generic [ref=e164] [cursor=pointer]:
+                    - img "تیشرت بیسکویتی سه خط 938" [ref=e165] [cursor=pointer]
+                    - generic [ref=e166] [cursor=pointer]: پرفروش
+                    - generic [ref=e167] [cursor=pointer]: "%۷۸-"
+                  - generic [ref=e168] [cursor=pointer]:
+                    - heading "تیشرت بیسکویتی سه خط 938" [level=3] [ref=e169] [cursor=pointer]
+                    - generic [ref=e170] [cursor=pointer]: ۲۰٬۰۰۰ تومان
+                    - generic [ref=e171] [cursor=pointer]: ۹۰٬۰۰۰ تومان
+        - region "بنرهای حراج" [ref=e172]:
+          - img "شبقل" [ref=e176]
+        - region "جدیدترین‌ها" [ref=e177]:
+          - generic [ref=e178]:
+            - generic [ref=e179]:
+              - heading "جدیدترین‌ها" [level=2] [ref=e180]
+              - link "مشاهده همه" [ref=e181] [cursor=pointer]:
+                - /url: /new
+            - generic [ref=e182]:
+              - link "هودی بیسکوبیتی" [ref=e183] [cursor=pointer]:
+                - /url: /product/hod-bsobt
+                - generic [ref=e185] [cursor=pointer]: جدید
+                - generic [ref=e186] [cursor=pointer]:
+                  - heading "هودی بیسکوبیتی" [level=3] [ref=e187] [cursor=pointer]
+                  - generic [ref=e188] [cursor=pointer]:
+                    - text: ۵۰٬۰۰۰
+                    - generic [ref=e189] [cursor=pointer]: تومان
+              - link "کت شلوار پسرانه کرم کد 947" [ref=e190] [cursor=pointer]:
+                - /url: /product/gdd
+                - generic [ref=e191] [cursor=pointer]:
+                  - generic [ref=e192] [cursor=pointer]: جدید
+                  - img "کت شلوار پسرانه کرم کد 947" [ref=e193] [cursor=pointer]
+                - generic [ref=e194] [cursor=pointer]:
+                  - heading "کت شلوار پسرانه کرم کد 947" [level=3] [ref=e195] [cursor=pointer]
+                  - generic [ref=e196] [cursor=pointer]:
+                    - text: ۴۰٬۰۰۰
+                    - generic [ref=e197] [cursor=pointer]: تومان
+              - link "شلوارک مشکی پاکتی 943" [ref=e198] [cursor=pointer]:
+                - /url: /product/tst-2
+                - generic [ref=e199] [cursor=pointer]:
+                  - generic [ref=e200] [cursor=pointer]: جدید
+                  - img "شلوارک مشکی پاکتی 943" [ref=e201] [cursor=pointer]
+                - generic [ref=e202] [cursor=pointer]:
+                  - heading "شلوارک مشکی پاکتی 943" [level=3] [ref=e203] [cursor=pointer]
+                  - generic [ref=e204] [cursor=pointer]:
+                    - text: ۳٬۰۰۰٬۰۰۰
+                    - generic [ref=e205] [cursor=pointer]: تومان
+              - link "هودی شلوار و پافر شمعی مشکی کد 2839" [ref=e206] [cursor=pointer]:
+                - /url: /product/thththth
+                - generic [ref=e207] [cursor=pointer]:
+                  - generic [ref=e208] [cursor=pointer]: جدید
+                  - img "هودی شلوار و پافر شمعی مشکی کد 2839" [ref=e209] [cursor=pointer]
+                - generic [ref=e210] [cursor=pointer]:
+                  - heading "هودی شلوار و پافر شمعی مشکی کد 2839" [level=3] [ref=e211] [cursor=pointer]
+                  - generic [ref=e212] [cursor=pointer]:
+                    - text: ۷۰٬۰۰۰
+                    - generic [ref=e213] [cursor=pointer]: تومان
+              - link "تیشرت بیسکویتی سه خط 938" [ref=e214] [cursor=pointer]:
+                - /url: /product/lds
+                - generic [ref=e215] [cursor=pointer]:
+                  - generic [ref=e216] [cursor=pointer]: جدید
+                  - img "تیشرت بیسکویتی سه خط 938" [ref=e217] [cursor=pointer]
+                - generic [ref=e218] [cursor=pointer]:
+                  - heading "تیشرت بیسکویتی سه خط 938" [level=3] [ref=e219] [cursor=pointer]
+                  - generic [ref=e220] [cursor=pointer]:
+                    - text: ۲۰٬۰۰۰
+                    - generic [ref=e221] [cursor=pointer]: تومان
+  - contentinfo [ref=e223]:
+    - generic [ref=e224]:
+      - generic [ref=e225]:
+        - heading "نیلانیکان" [level=2] [ref=e226]
+        - paragraph [ref=e227]: فروشگاه اینترنتی نیلانیکان در قلب ایران فعالیت خودش را آغاز نموده است. ما بهترین لباس کودک را برای مردم شریف ایران فراهم کرده‌ایم و از سال ۱۳۸۷ با کیفیت بالا، قیمت رقابتی و خدمات عالی اعتماد صدها هزار مشتری در سراسر کشور را جلب کرده‌ایم.
+        - generic [ref=e228]:
+          - heading "پیگیری سفارش" [level=4] [ref=e229]
+          - generic [ref=e230]:
+            - textbox "کد سفارش خود را وارد کنید" [ref=e231]
+            - button "پیگیری" [ref=e232]
+      - generic [ref=e233]:
+        - heading "لینک‌های مهم" [level=3] [ref=e234]
+        - list [ref=e235]:
+          - listitem [ref=e236]:
+            - link "درباره ما" [ref=e237] [cursor=pointer]:
+              - /url: /about
+          - listitem [ref=e238]:
+            - link "تماس با ما" [ref=e239] [cursor=pointer]:
+              - /url: /contact
+          - listitem [ref=e240]:
+            - link "سوالات متداول" [ref=e241] [cursor=pointer]:
+              - /url: /faq
+          - listitem [ref=e242]:
+            - link "حریم خصوصی" [ref=e243] [cursor=pointer]:
+              - /url: /privacy
+          - listitem [ref=e244]:
+            - link "شرایط استفاده" [ref=e245] [cursor=pointer]:
+              - /url: /terms
+      - generic [ref=e246]:
+        - heading "شعبات حضوری" [level=3] [ref=e248]
+        - generic [ref=e251]:
+          - generic [ref=e252]:
+            - button "شعبه ۱" [pressed] [ref=e253]
+            - button "شعبه ۲" [ref=e254]
+            - button "شعبه ۳" [ref=e255]
+          - generic [ref=e256]:
+            - paragraph [ref=e257]:
+              - generic [ref=e258]: شعبه ۱
+              - text: — گلسار، بلوار دیلمان، جنب کوچه آذر اندامی
+            - generic [ref=e259]:
+              - link "🧭 نمایش در نشان" [ref=e260] [cursor=pointer]:
+                - /url: https://nshn.ir/branch1
+              - link "🗺️ نمایش در بلد" [ref=e261] [cursor=pointer]:
+                - /url: https://balad.ir/branch1
+    - generic [ref=e263]:
+      - link "اینماد" [ref=e264] [cursor=pointer]:
+        - /url: https://trustseal.enamad.ir/
+        - img "اینماد" [ref=e265] [cursor=pointer]
+      - link "ترب" [ref=e266] [cursor=pointer]:
+        - /url: https://torob.com/your-shop
+        - img "ترب" [ref=e267] [cursor=pointer]
+      - link "ایمالز" [ref=e268] [cursor=pointer]:
+        - /url: https://emalls.ir/your-shop
+        - img "ایمالز" [ref=e269] [cursor=pointer]
+      - link "نماد رضا" [ref=e270] [cursor=pointer]:
+        - /url: https://rezanamad.ir/your-shop
+        - img "نماد رضا" [ref=e271] [cursor=pointer]
+    - generic [ref=e272]: © 2025 نیلانیکان — تمامی حقوق محفوظ است.
+  - button "گفتگو 1" [ref=e273]:
+    - text: گفتگو
+    - generic [ref=e274]: "1"
+  - button "Open Next.js Dev Tools" [ref=e280] [cursor=pointer]:
+    - img [ref=e281] [cursor=pointer]
+  - alert [ref=e284]
+```

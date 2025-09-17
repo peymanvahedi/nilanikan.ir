@@ -6,21 +6,26 @@ from datetime import timedelta
 
 load_dotenv()
 
-# ---------- Base ----------
-BASE_DIR = Path(__file__).resolve().parent.parent
-
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-insecure-change-me")
-DEBUG = os.getenv("DJANGO_DEBUG", "True") == "True"
-
-# ---------- Hosts ----------
+# ---------- Helpers ----------
 def _split_env_list(name, default=""):
     val = os.getenv(name, default)
     return [x.strip() for x in val.split(",") if x.strip()]
 
-ALLOWED_HOSTS = (
-    ["*"]
-    if DEBUG
-    else _split_env_list("ALLOWED_HOSTS", "127.0.0.1,localhost,0.0.0.0,192.168.103.17")
+def _env_bool(name, default=False):
+    val = os.getenv(name)
+    if val is None:
+        return default
+    return val.lower() in ("1", "true", "yes", "on")
+
+# ---------- Base ----------
+BASE_DIR = Path(__file__).resolve().parent.parent
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-insecure-change-me")
+DEBUG = _env_bool("DJANGO_DEBUG", True)
+
+# ---------- Hosts ----------
+ALLOWED_HOSTS = _split_env_list(
+    "ALLOWED_HOSTS",
+    "127.0.0.1,localhost,0.0.0.0,192.168.103.17,backend,frontend"
 )
 
 # ---------- Apps ----------
@@ -32,10 +37,13 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+
     # 3rd-party
+    "corsheaders",
     "rest_framework",
     "rest_framework.authtoken",
-    "corsheaders",
+    "channels",
+
     # Local apps
     "accounts",
     "catalog",
@@ -45,13 +53,14 @@ INSTALLED_APPS = [
     "banners",
     "stories",
     "reviews",
+    "chat",
 ]
 
 # ---------- Middleware ----------
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
-    "corsheaders.middleware.CorsMiddleware",  # ⭐️ باید قبل از Session و Common بیاد
+    "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -80,12 +89,12 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "shop_backend.wsgi.application"
+ASGI_APPLICATION = "shop_backend.asgi.application"
 
 # ---------- Database ----------
 DATABASE_URL = os.getenv("DATABASE_URL")
 if DATABASE_URL:
     import dj_database_url
-
     DATABASES = {"default": dj_database_url.parse(DATABASE_URL, conn_max_age=600)}
 else:
     DATABASES = {
@@ -123,17 +132,12 @@ USE_TZ = True
 # ---------- Static / Media ----------
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
-
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
-    "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"
-    },
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
 }
-
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
-
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # ---------- DRF / JWT ----------
@@ -145,7 +149,6 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,
 }
-
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=30),
@@ -153,32 +156,64 @@ SIMPLE_JWT = {
 }
 
 # ---------- CORS / CSRF ----------
+CORS_ALLOWED_ORIGINS = [
+    "http://127.0.0.1:3000",
+    "http://localhost:3000",
+    "http://192.168.103.17:3000",
+]
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_ALL_ORIGINS = False  # ⭐️ wildcard غیرفعال
 
-CORS_ALLOWED_ORIGINS = _split_env_list(
-    "CORS_ALLOWED_ORIGINS",
-    "http://127.0.0.1:3000,http://localhost:3000,http://192.168.103.17:3000",
-)
-
-_DEFAULT_TRUSTED = [
+CSRF_TRUSTED_ORIGINS = [
     "http://localhost:8000",
     "http://127.0.0.1:8000",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "http://192.168.103.17:3000",
 ]
-_ENV_TRUSTED = _split_env_list(
-    "CSRF_TRUSTED_ORIGINS", "http://192.168.103.17:3000"
-)
-CSRF_TRUSTED_ORIGINS = sorted(set(_DEFAULT_TRUSTED + _ENV_TRUSTED))
 
 USE_X_FORWARDED_HOST = True
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 SESSION_COOKIE_SECURE = False
 CSRF_COOKIE_SECURE = False
-
 APPEND_SLASH = True
 
 # ---------- Custom ----------
-GUEST_USER_ID = 1
+GUEST_USER_ID = int(os.getenv("GUEST_USER_ID", "1"))
+
+# ---------- Zarinpal Integration ----------
+ZARINPAL_MODE = os.getenv("ZARINPAL_MODE", "sandbox").lower()
+ZARINPAL_MERCHANT_ID = os.getenv(
+    "ZARINPAL_MERCHANT_ID",
+    "7be9a33e-e18b-4731-9320-99c4a1053e92"
+)
+
+_default_host = os.getenv("LOCAL_HOST_IP", "192.168.103.17")
+ZARINPAL_CALLBACK_URL = os.getenv(
+    "ZARINPAL_CALLBACK_URL",
+    f"http://{_default_host}:8000/api/orders/payment/callback/"
+)
+ZARINPAL_SUCCESS_REDIRECT = os.getenv(
+    "ZARINPAL_SUCCESS_REDIRECT",
+    f"http://{_default_host}:3000/checkout/success"
+)
+ZARINPAL_FAIL_REDIRECT = os.getenv(
+    "ZARINPAL_FAIL_REDIRECT",
+    f"http://{_default_host}:3000/checkout/fail"
+)
+
+# ---------- Channels ----------
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer"
+    }
+}
+
+
+
+# ---------- Channels ----------
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer"
+    }
+}

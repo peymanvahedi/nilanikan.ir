@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from .models import CartItem, Order, OrderItem
 from catalog.models import Product
-from catalog.serializers import ProductSerializer  # فرض بر اینکه دارید
+from catalog.serializers import ProductSerializer  # اگر دارید
 
 
 class CartItemSerializer(serializers.ModelSerializer):
@@ -37,23 +37,10 @@ class OrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = Order
         fields = [
-            "id",
-            "user",
-            "status",
-            "address",
-            "postal_code",
-            "shipping_method",
-            "shipping_cost",
-            "items_subtotal",
-            "total_amount",
-            "tracking_code",
-            "created_at",
-            "items",
+            "id", "user", "status", "address",
+            # "postal_code",  ← حذف شد
+            "shipping_method", "shipping_cost",
+            "items_subtotal", "total_amount",
+            "tracking_code", "created_at", "items",
         ]
-        read_only_fields = [
-            "user",
-            "status",
-            "items_subtotal",
-            "total_amount",
-            "created_at",
-        ]
+        read_only_fields = ["user", "status", "items_subtotal", "total_amount", "created_at"]

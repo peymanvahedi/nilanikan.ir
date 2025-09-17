@@ -13,7 +13,6 @@ type ShippingMethod = "post" | "mahex";
 const nf = new Intl.NumberFormat("fa-IR", { maximumFractionDigits: 0 });
 const toFa = (n: number) => Number(n || 0).toLocaleString("fa-IR");
 const validPhone = (p: string) => /^09\d{9}$/.test(String(p).replace(/[^\d]/g, ""));
-const validPostal = (p: string) => /^\d{10}$/.test(String(p).replace(/[^\d]/g, ""));
 
 function lineTitle(it: { kind: "product" | "bundle"; name?: string; title?: string }) {
   return it.kind === "bundle" ? String(it.title ?? it.name ?? "باندل") : String(it.name ?? "محصول");
@@ -33,7 +32,6 @@ export default function CheckoutPage() {
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
-  const [postalCode, setPostalCode] = useState("");
   const [shipping, setShipping] = useState<ShippingMethod>("post");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -81,9 +79,8 @@ export default function CheckoutPage() {
       !fullName.trim() ||
       !validPhone(phone) ||
       !address.trim() ||
-      !validPostal(postalCode) ||
       submitting,
-    [items, fullName, phone, address, postalCode, submitting]
+    [items, fullName, phone, address, submitting]
   );
 
   const payAndCreateOrder = async () => {
@@ -92,25 +89,25 @@ export default function CheckoutPage() {
       setSubmitting(true);
       setError("");
 
-      // Payload استاندارد سمت سرور
       const serverPayload = {
-        customer_name: fullName,
-        customer_phone: phone,
-        address,
-        postal_code: postalCode,
-        shipping_method: shipping,
-        shipping_cost: shippingCost,
-        items: (Array.isArray(items) ? items : []).map((it: any) => ({
-          product_id: it.id,
-          quantity: it.qty ?? it.quantity ?? 1,
-          price: it.price ?? 0,
-          name: it.name ?? it.title ?? `#${it.id}`,
-          image: it.image ?? null,
-          kind: it.kind ?? "product",
-        })),
-        items_subtotal: itemsSubtotal,
-        total: grandTotal,
-      };
+  cart: (Array.isArray(items) ? items : []).map((it: any) => ({
+    product_id: it.id,
+    qty: it.qty ?? it.quantity ?? 1,
+  })),
+  customer: {
+    first_name: fullName,
+    last_name: "",
+    email: "",
+    phone: phone,
+  },
+  shipping_address: {
+    line1: address,
+    city: "",
+  },
+  shipping_method: shipping,
+};
+
+
 
       // ارسال با احراز هویت (Bearer) – api.ts خودش refresh می‌کند
       const data: any = await post(endpoints.checkout, serverPayload, {
@@ -184,7 +181,9 @@ export default function CheckoutPage() {
                   inputMode="tel"
                 />
                 {!validPhone(phone) && phone && (
-                  <span className="text-xs text-rose-600">شماره موبایل را ۱۱ رقمی وارد کنید (09123456789)</span>
+                  <span className="text-xs text-rose-600">
+                    شماره موبایل را ۱۱ رقمی وارد کنید (09123456789)
+                  </span>
                 )}
               </label>
             </div>
@@ -197,21 +196,6 @@ export default function CheckoutPage() {
                 onChange={(e) => setAddress(e.target.value)}
                 placeholder="استان، شهر، محله، خیابان، کوچه، پلاک، واحد"
               />
-            </label>
-
-            <label className="block mt-4 max-w-xs">
-              <span className="text-sm">کد پستی (۱۰ رقمی)</span>
-              <input
-                className="mt-1 w-full h-11 rounded-lg border border-zinc-200 px-3 outline-none"
-                value={postalCode}
-                onChange={(e) => setPostalCode(e.target.value)}
-                placeholder="XXXXXXXXXX"
-                inputMode="numeric"
-                maxLength={10}
-              />
-              {!validPostal(postalCode) && postalCode && (
-                <span className="text-xs text-rose-600">کد پستی باید ۱۰ رقم باشد.</span>
-              )}
             </label>
           </div>
 
@@ -247,10 +231,7 @@ export default function CheckoutPage() {
 
           <ul className="space-y-2 text-sm" suppressHydrationWarning>
             {(Array.isArray(items) ? items : []).map((it: any, idx: number) => (
-              <li
-                key={`${it?.kind ?? "product"}-${it?.id}-${idx}`}
-                className="flex justify-between"
-              >
+              <li key={`${it?.kind ?? "product"}-${it?.id}-${idx}`} className="flex justify-between">
                 <span className="truncate max-w-[60%]">
                   {lineTitle(it)}
                   {it?.qty > 1 ? ` × ${it.qty}` : ""}
@@ -272,7 +253,9 @@ export default function CheckoutPage() {
             <span>{nf.format(grandTotal)} تومان</span>
           </div>
 
-          {error && <div className="text-xs text-rose-600 mt-2 whitespace-pre-wrap break-words">{error}</div>}
+          {error && (
+            <div className="text-xs text-rose-600 mt-2 whitespace-pre-wrap break-words">{error}</div>
+          )}
 
           <button
             onClick={payAndCreateOrder}

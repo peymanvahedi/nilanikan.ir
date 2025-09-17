@@ -20,13 +20,13 @@ const toTomanSmart = (rialOrToman?: number) => {
 const fmt = (toman: number) =>
   new Intl.NumberFormat("fa-IR").format(Math.max(0, Math.round(toman))) + " تومان";
 
-const pickImg = (p: any): string =>
+// ⛔️ بدون پیش‌فرض
+const pickImg = (p: any): string | undefined =>
   p?.imageUrl ||
   p?.image ||
   (Array.isArray(p?.images) && p.images.find((x: any) => !!x)) ||
-  (Array.isArray(p?.gallery) &&
-    p.gallery.map((g: any) => g?.image).find((x: any) => !!x)) ||
-  "/placeholder.png";
+  (Array.isArray(p?.gallery) && p.gallery.map((g: any) => g?.image).find((x: any) => !!x)) ||
+  undefined;
 
 const hrefOf = (p: any): string => {
   if (p?.link) return p.link;
@@ -160,12 +160,17 @@ export default function BestSellersSlider({
               >
                 <Link href={href} className="block">
                   <div className="relative w-full aspect-[4/5] rounded-[16px] overflow-hidden">
-                    <img
-                      src={img}
-                      alt={p?.name ?? p?.title ?? ""}
-                      className="w-full h-full object-cover bg-[#F9F5F2]"
-                      onError={(e: any) => (e.currentTarget.src = "/placeholder.png")}
-                    />
+                    {/* فقط وقتی تصویر داریم نمایش بده؛ در خطا، تصویر مخفی شود */}
+                    {img && (
+                      <img
+                        src={img}
+                        alt={p?.name ?? p?.title ?? ""}
+                        className="w-full h-full object-cover bg-[#F9F5F2]"
+                        onError={(e: any) => {
+                          e.currentTarget.style.display = "none";
+                        }}
+                      />
+                    )}
                     <span className="absolute right-0 top-2 z-10 rounded-l-xl px-2 py-1 text-[11px] font-extrabold bg-pink-600 text-white">
                       پرفروش
                     </span>

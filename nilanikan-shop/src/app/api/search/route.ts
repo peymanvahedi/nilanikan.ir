@@ -1,33 +1,68 @@
 // src/app/api/search/route.ts
 import { NextResponse } from "next/server";
-import { get, endpoints } from "@/lib/api";
 
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
-    const q = url.searchParams.get("q") ?? "";
+    const q = (url.searchParams.get("q") ?? "").trim();
+    if (!q) return NextResponse.json({ results: [] });
 
-    if (!q || q.trim().length < 1) {
-      return NextResponse.json({ results: [] });
+    // سعی کن از lib/api پروژه استفاده کنی (اگه وجود داشته باشه)
+    try {
+      const mod = await import("@/lib/api");
+      const { get, endpoints, buildQuery } = mod as any;
+
+      if (get && endpoints) {
+        // به‌صورت امن و بدون ?? روی عبارتِ همیشه-استرینگ:
+        const epSearch: string | undefined =
+          (endpoints as any).search ||
+          (typeof (endpoints as any).home === "string"
+            ? (endpoints as any).home.replace(/\/home\/?$/, "/") + "search/"
+            : undefined);
+
+        if (epSearch) {
+          // اگر داخل epSearch قبلاً پارامتر داشت، & بزن؛ وگرنه ?q=
+          const hasQuery = epSearch.includes("?");
+          const base = epSearch.endsWith("/") || epSearch.endsWith("?") ? epSearch : epSearch;
+          const finalUrl = hasQuery
+            ? `${base}&q=${encodeURIComponent(q)}`
+            : `${base}${base.endsWith("/") ? "" : "/"}?q=${encodeURIComponent(q)}`;
+
+          const resp = await get(finalUrl, { throwOnHTTP: false, fallback: { results: [] } });
+          if (Array.isArray(resp)) return NextResponse.json({ results: resp });
+          return NextResponse.json(resp ?? { results: [] });
+        }
+
+        // fallback: جستجو روی لیست محصولات
+        const query = buildQuery
+          ? buildQuery({ page: 1, limit: 20, search: q })
+          : `?search=${encodeURIComponent(q)}&limit=20&page=1`;
+
+        const data = await get(`${endpoints.products}${query}`, {
+          throwOnHTTP: false,
+          fallback: { results: [] },
+        });
+
+        const items = Array.isArray(data) ? data : data?.results ?? data?.items ?? data?.data ?? [];
+        return NextResponse.json({ results: items });
+      }
+    } catch {
+      // اگر lib/api نبود، می‌ریم سراغ fallback عمومی
     }
 
-    // اگر lib/api شما endpoint مخصوص search دارد، از آن استفاده کن:
-    // مثال: endpoints.search یا endpoints.home + 'search/'
-    const searchEndpoint =
-      (endpoints as any).search ||
-      (endpoints as any).home?.replace(/\/home\/?$/, "/") + `search/?q=${encodeURIComponent(q)}` ||
-      `/search?q=${encodeURIComponent(q)}`;
+    // Fallback نهایی: مستقیم به NEXT_PUBLIC_API_BASE
+    const apiBase = process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") ?? "";
+    if (!apiBase) return NextResponse.json({ results: [] });
 
-    // از تابع get پروژه استفاده کن تا header/auth و ... مرجع‌شده رعایت شوند
-    const resp = await get<any>(typeof searchEndpoint === "string" ? searchEndpoint : `${searchEndpoint}?q=${encodeURIComponent(q)}`, {
-      throwOnHTTP: false,
-      fallback: { results: [] },
+    const r = await fetch(`${apiBase}/products?search=${encodeURIComponent(q)}&limit=20&page=1`, {
+      cache: "no-store",
+      headers: { Accept: "application/json" },
     });
+    if (!r.ok) return NextResponse.json({ results: [] }, { status: r.status });
 
-    // اگر بک‌اند مستقیم آرایه می‌فرسته، بصورت سازگار برگردون
-    if (Array.isArray(resp)) return NextResponse.json({ results: resp });
-
-    return NextResponse.json(resp);
+    const json = await r.json();
+    const items = Array.isArray(json) ? json : json?.results ?? json?.items ?? json?.data ?? [];
+    return NextResponse.json({ results: items });
   } catch (err) {
     console.error("search api error:", err);
     return NextResponse.json({ results: [] }, { status: 500 });

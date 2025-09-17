@@ -1,9 +1,9 @@
-# catalog/models.py
 from django.db import models
+from django.utils.text import slugify
 
 
 # =========================
-# Category
+# Category (only once)
 # =========================
 class Category(models.Model):
     name = models.CharField(max_length=120)
@@ -16,11 +16,19 @@ class Category(models.Model):
         on_delete=models.SET_NULL,
         related_name="children",
     )
+
+    # فیلدهای مخصوص منو
+    is_active = models.BooleanField(default=True)
+    show_in_menu = models.BooleanField(default=True)
+    menu_order = models.IntegerField(default=0)  # ترتیب نمایش در منو
+    icon = models.CharField(max_length=64, blank=True, null=True)  # نام آیکون/کلاس دلخواه
+    image = models.ImageField(upload_to="categories/", blank=True, null=True)  # بنر/تصویر منو
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         verbose_name_plural = "Categories"
-        ordering = ["name"]
+        ordering = ["menu_order", "name"]  # ابتدا بر اساس ترتیب منو، سپس نام
 
     def __str__(self) -> str:
         return self.name
@@ -49,8 +57,8 @@ class Product(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     attributes = models.ManyToManyField(
-    'AttributeValue', blank=True, related_name='products'
-)
+        "AttributeValue", blank=True, related_name="products"
+    )
     size_chart = models.JSONField(blank=True, null=True)
 
     def __str__(self) -> str:
@@ -58,7 +66,6 @@ class Product(models.Model):
 
 
 def product_image_upload_to(instance, filename: str) -> str:
-    # در صورت نبودن slug، از id استفاده می‌کنیم
     slug_or_id = instance.product.slug if instance.product.slug else instance.product_id
     return f"products/gallery/{slug_or_id}/{filename}"
 
@@ -78,6 +85,32 @@ class ProductImage(models.Model):
 
     def __str__(self) -> str:
         return f"Image for {self.product.name}"
+
+
+# ---------- Product Videos ----------
+def product_video_upload_to(instance, filename: str) -> str:
+    slug_or_id = instance.product.slug if instance.product.slug else instance.product_id
+    return f"products/{slug_or_id}/videos/{filename}"
+
+
+class ProductVideo(models.Model):
+    """گالری ویدیو برای هر محصول"""
+    product = models.ForeignKey("Product", on_delete=models.CASCADE, related_name="videos")
+    # یکی از این دو: یا فایل آپلودی، یا لینک خارجی (آپارات/یوتیوب/ویمیو)
+    file = models.FileField(upload_to=product_video_upload_to, blank=True, null=True)
+    external_url = models.URLField(blank=True, null=True)
+    # اختیاری: کاور
+    thumbnail = models.ImageField(upload_to=product_video_upload_to, blank=True, null=True)
+    title = models.CharField(max_length=200, blank=True, default="")
+    order = models.PositiveIntegerField(default=0)
+    is_primary = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["order", "id"]
+
+    def __str__(self):
+        return f"Video for {self.product.name}"
 
 
 # =========================
@@ -121,6 +154,30 @@ class BundleImage(models.Model):
         return f"Image for {self.bundle.title}"
 
 
+# ---------- Bundle Videos ----------
+def bundle_video_upload_to(instance, filename: str) -> str:
+    slug_or_id = instance.bundle.slug if instance.bundle.slug else instance.bundle_id
+    return f"bundles/{slug_or_id}/videos/{filename}"
+
+
+class BundleVideo(models.Model):
+    """گالری ویدیو برای هر باندل"""
+    bundle = models.ForeignKey("Bundle", on_delete=models.CASCADE, related_name="videos")
+    file = models.FileField(upload_to=bundle_video_upload_to, blank=True, null=True)
+    external_url = models.URLField(blank=True, null=True)
+    thumbnail = models.ImageField(upload_to=bundle_video_upload_to, blank=True, null=True)
+    title = models.CharField(max_length=200, blank=True, default="")
+    order = models.PositiveIntegerField(default=0)
+    is_primary = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["order", "id"]
+
+    def __str__(self):
+        return f"Video for {self.bundle.title}"
+
+
 # =========================
 # Banner
 # =========================
@@ -139,7 +196,9 @@ class Banner(models.Model):
         return self.alt or f"Banner {self.id}"
 
 
-
+# =========================
+# Attributes
+# =========================
 class Attribute(models.Model):
     TEXT = "text"
     COLOR = "color"
@@ -171,7 +230,6 @@ class AttributeValue(models.Model):
         return f"{self.attribute.name}: {self.value}"
 
 
-
 # --- ProductVariant: قیمت جدا برای هر سایز ---
 class ProductVariant(models.Model):
     product = models.ForeignKey("Product", on_delete=models.CASCADE, related_name="variants")
@@ -187,3 +245,45 @@ class ProductVariant(models.Model):
     def __str__(self):
         sval = getattr(self.size, "value", "")
         return f"{self.product.name} - {sval} ({self.price})"
+
+
+
+# =========================
+# MenuItem (منوی مستقل با تفکیک دسکتاپ/موبایل)
+# =========================
+class MenuItem(models.Model):
+    DEVICE_ALL = "all"
+    DEVICE_DESKTOP = "desktop"
+    DEVICE_MOBILE = "mobile"
+    DEVICE_CHOICES = [
+        (DEVICE_ALL, "All"),
+        (DEVICE_DESKTOP, "Desktop"),
+        (DEVICE_MOBILE, "Mobile"),
+    ]
+
+    name = models.CharField(max_length=120)
+    slug = models.SlugField(max_length=140, blank=True)
+    parent = models.ForeignKey("self", null=True, blank=True, on_delete=models.CASCADE, related_name="children")
+
+    # یکی از این دو برای لینک: اگر category باشد از /category/<slug> استفاده می‌شود؛ وگرنه url
+    category = models.ForeignKey("Category", null=True, blank=True, on_delete=models.SET_NULL, related_name="menu_items")
+    url = models.URLField(blank=True, null=True)
+
+    icon = models.ImageField(upload_to="menu/icons/", blank=True, null=True)
+    image = models.ImageField(upload_to="menu/images/", blank=True, null=True)
+
+    sort_order = models.PositiveIntegerField(default=0)
+    device = models.CharField(max_length=10, choices=DEVICE_CHOICES, default=DEVICE_ALL)
+    is_active = models.BooleanField(default=True)
+    open_in_new = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["sort_order", "id"]
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = slugify(self.name, allow_unicode=True)
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        return self.name

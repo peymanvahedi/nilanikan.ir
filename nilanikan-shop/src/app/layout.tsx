@@ -4,6 +4,7 @@ import "./globals.css";
 
 import Header from "@/components/Header";
 import ClientProviders from "@/components/ClientProviders";
+import Footer from "@/components/Footer"; // ✅ اضافه شد
 
 export const metadata: Metadata = {
   title: "فروشگاه نیلانیکان",
@@ -24,18 +25,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         suppressHydrationWarning
       >
         <ClientProviders>
-          {/* هدر سایت */}
           <Header />
-
-          {/* محتوای اصلی */}
           <main className="min-h-[calc(100vh-80px)]">{children}</main>
-
-          {/* فوتر */}
-          <footer className="mt-16 border-t border-zinc-200">
-            <div className="mx-auto max-w-6xl px-4 py-8 text-xs text-zinc-600 text-center">
-              © {new Date().getFullYear()} نیلانیکان — تمامی حقوق محفوظ است.
-            </div>
-          </footer>
+          <Footer />   {/* ✅ فوتر پیشرفته */}
         </ClientProviders>
       </body>
     </html>

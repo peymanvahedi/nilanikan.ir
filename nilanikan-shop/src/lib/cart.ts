@@ -146,6 +146,13 @@ export async function addToCart(item: CartItemBase, qty = 1) {
   dispatchAdd(q);
 }
 
+/** ✅ تابع اضافه شده برای ایمپورت مورد نیاز */
+export async function addManyToCart(itemsToAdd: CartItem[]) {
+  for (const it of itemsToAdd) {
+    await addToCart(it, it.qty);
+  }
+}
+
 export async function removeFromCart(productId: number | string): Promise<CartItem[]> {
   try {
     if (typeof window !== "undefined" && localStorage.getItem("token")) {

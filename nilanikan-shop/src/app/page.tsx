@@ -1,4 +1,3 @@
-// src/app/page.tsx
 import BannerSlider from "../components/BannerSlider";
 import StorySliderWrapper from "../components/StorySliderWrapper";
 import VIPDealsSlider from "../components/VIPDealsSlider";
@@ -8,7 +7,7 @@ import BestSellersSlider from "../components/BestSellersSlider";
 import BannersRow from "../components/BannersRow";
 
 import type { Slide, BannerItem } from "@/types/home";
-import { fetchHome, get, endpoints } from "../lib/api";
+import { fetchHome, endpoints } from "../lib/api";
 
 export const dynamic = "force-dynamic";
 
@@ -44,7 +43,6 @@ function mapToBanner(r: any): BannerItem {
   };
 }
 
-/* استوری → StorySliderWrapper کلید image می‌خواهد */
 function mapToStoryForWrapper(r: any, i: number) {
   const img =
     firstTruthy(
@@ -72,7 +70,6 @@ function mapToStoryForWrapper(r: any, i: number) {
   };
 }
 
-/* کارت محصول عمومی (برای CardSlider) */
 function toCardItemBase(r: any) {
   const displayTitle = String(
     firstTruthy(
@@ -112,7 +109,6 @@ function toCardItemBase(r: any) {
   return { ...r, title: displayTitle, name: displayTitle, imageUrl, slug, id };
 }
 
-/* ✅ لینک امن برای باندل: مقدار را در href ست کن (نه link) */
 function toBundleCardItem(r: any) {
   const base = toCardItemBase(r);
   const hasSlug = base.slug && !/^\d+$/.test(String(base.slug));
@@ -122,7 +118,6 @@ function toBundleCardItem(r: any) {
   return { ...base, href };
 }
 
-/* کارت‌های معمولی (مثلاً جدیدترین‌ها) */
 function toProductCardItem(r: any) {
   const base = toCardItemBase(r);
   const href =
@@ -133,48 +128,30 @@ function toProductCardItem(r: any) {
 
 export default async function Page() {
   const data = await fetchHome();
-  const apiRoot = endpoints.home.replace(/\/home\/?$/, "/");
 
-  // Slides (Hero)
-  let heroSlides: Slide[] = listify(data?.heroSlides) as Slide[];
-  if (!heroSlides.length) {
-    const raw = await get<any>(`${apiRoot}slides/`, {
-      throwOnHTTP: false,
-      fallback: { results: [] },
-    });
-    heroSlides = listify(raw).map(mapToSlide);
-  }
+  // ✅ بدون fallback
+  const heroSlides: Slide[] = listify(data?.heroSlides).map(mapToSlide);
+  const bannerItems: BannerItem[] = listify(data?.banners).map(mapToBanner);
 
-  // Banners
-  let bannerItems: BannerItem[] = listify(data?.banners).map(mapToBanner);
-  if (!bannerItems.length) {
-    const rawB = await get<any>(`${apiRoot}banners/`, {
-      throwOnHTTP: false,
-      fallback: { results: [] },
-    });
-    bannerItems = listify(rawB).map(mapToBanner);
-  }
-
-  // Stories
   const storiesRaw = listify(data?.stories).slice(0, 50);
   const storiesProp = storiesRaw.length ? storiesRaw.map(mapToStoryForWrapper) : undefined;
 
-  // VIP
   const vipProducts = listify(data?.vip?.products).slice(0, 12);
 
-  // 🔧 این‌ها مهم‌اند
   const setsAndPufferItems = listify(data?.setsAndPuffer?.items).map(toBundleCardItem).slice(0, 12);
   const newArrivalsItems   = listify(data?.newArrivals).map(toProductCardItem).slice(0, 12);
 
   return (
     <main className="container mx-auto px-3 sm:px-4 md:px-6 py-4 md:py-6">
       <div className="flex flex-col gap-6 sm:gap-8 md:gap-10">
-        {/* اسلایدر هدر */}
-        <section aria-label="اسلایدر هدر">
-          <BannerSlider slides={heroSlides} />
-        </section>
 
-        {/* استوری‌ها */}
+        {/* ✅ اسلایدر هدر فقط اگر داده دارد */}
+        {heroSlides.length > 0 && (
+          <section aria-label="اسلایدر هدر">
+            <BannerSlider slides={heroSlides} />
+          </section>
+        )}
+
         <section aria-label="استوری‌ها">
           <h2 className="text-lg font-bold mb-3 sm:mb-4 text-pink-600 border-b-2 border-pink-500 inline-flex items-center gap-2">
             <span>🌟</span>
@@ -183,7 +160,6 @@ export default async function Page() {
           <StorySliderWrapper limit={50} items={storiesProp} />
         </section>
 
-        {/* VIP */}
         {vipProducts.length > 0 && (
           <section aria-label="پیشنهادهای VIP">
             <VIPDealsSlider
@@ -195,7 +171,6 @@ export default async function Page() {
           </section>
         )}
 
-        {/* ست‌ها و پافر */}
         <section aria-label="ست‌ها و پافر">
           <CardSlider
             title="ست‌ها و پافر"
@@ -209,23 +184,21 @@ export default async function Page() {
           />
         </section>
 
-        {/* تن‌خور کوچک */}
         <section aria-label="تن‌خور کوچک بچه‌ها">
           <MiniLooksSlider items={listify(data?.miniLooks).slice(0, 10)} />
         </section>
 
-        {/* پرفروش‌ها */}
         <section aria-label="پرفروش‌ترین‌ها">
-          {/* ❗️بدون هیچ تبدیل قیمتی؛ تبدیل/فرمت داخل BestSellersSlider انجام می‌شود */}
           <BestSellersSlider products={listify(data?.bestSellers)} />
         </section>
 
-        {/* بنرها */}
-        <section aria-label="بنرهای حراج" className="py-1 sm:py-2">
-          <BannersRow items={bannerItems} />
-        </section>
+        {/* ✅ بنرها فقط اگر داده دارد */}
+        {bannerItems.length > 0 && (
+          <section aria-label="بنرهای حراج" className="py-1 sm:py-2">
+            <BannersRow items={bannerItems} />
+          </section>
+        )}
 
-        {/* جدیدترین‌ها */}
         <section aria-label="جدیدترین‌ها">
           <CardSlider
             title="جدیدترین‌ها"

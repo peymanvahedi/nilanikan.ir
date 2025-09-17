@@ -32,13 +32,15 @@ const num = (v: unknown): number | undefined => {
   const n = Number(String(v).replace(/[^\d.]/g, ""));
   return Number.isFinite(n) ? n : undefined;
 };
-const pickImg = (p: any): string =>
+
+// ⛔️ بدون پیش‌فرض
+const pickImg = (p: any): string | undefined =>
   p?.imageUrl ||
   p?.image ||
   (Array.isArray(p?.images) && p.images.find((x: any) => !!x)) ||
-  (Array.isArray(p?.gallery) &&
-    p.gallery.map((g: any) => g?.image).find((x: any) => !!x)) ||
-  "/placeholder.png";
+  (Array.isArray(p?.gallery) && p.gallery.map((g: any) => g?.image).find((x: any) => !!x)) ||
+  undefined;
+
 const hrefOf = (p: any): string => {
   if (p?.link) return p.link;
   if (p?.slug && p?.kind === "bundle") return `/bundle/${p.slug}`;
@@ -105,22 +107,26 @@ export default function VIPDealsSlider({
             const href = hrefOf(p);
 
             return (
-            <article
-  key={`${p?.id ?? "id"}-${idx}`}
-  className="shrink-0 snap-center
-             w-1/2 sm:w-1/2 md:w-1/3 lg:w-1/4 xl:w-1/5
-             rounded-[20px] bg-white ring-1 ring-zinc-200 shadow
-             hover:shadow-md transition-all duration-300 ease-out overflow-hidden p-3"
->
-
+              <article
+                key={`${p?.id ?? "id"}-${idx}`}
+                className="shrink-0 snap-center
+                           w-1/2 sm:w-1/2 md:w-1/3 lg:w-1/4 xl:w-1/5
+                           rounded-[20px] bg-white ring-1 ring-zinc-200 shadow
+                           hover:shadow-md transition-all duration-300 ease-out overflow-hidden p-3"
+              >
                 <Link href={href} className="block">
-<div className="relative w-full aspect-[3/4] rounded-xl overflow-hidden">
-                    <img
-                      src={img}
-                      alt={p?.name ?? p?.title ?? ""}
-                      className="w-full h-full object-cover bg-[#F9F5F2]"
-                      onError={(e: any) => (e.currentTarget.src = "/placeholder.png")}
-                    />
+                  <div className="relative w-full aspect-[3/4] rounded-xl overflow-hidden">
+                    {/* فقط اگر تصویر داریم، نشان بده؛ در خطای لود، تصویر را مخفی کن */}
+                    {img && (
+                      <img
+                        src={img}
+                        alt={p?.name ?? p?.title ?? ""}
+                        className="w-full h-full object-cover bg-[#F9F5F2]"
+                        onError={(e: any) => {
+                          e.currentTarget.style.display = "none";
+                        }}
+                      />
+                    )}
                     <span className="absolute right-0 top-2 z-10 rounded-l-xl px-2 py-1 text-[11px] font-extrabold bg-pink-600 text-white">
                       VIP
                     </span>

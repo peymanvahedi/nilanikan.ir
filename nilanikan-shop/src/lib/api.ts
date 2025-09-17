@@ -48,7 +48,7 @@ export function buildQuery(q?: Query) {
 
 // ───────────────────────────────────────────────────────────
 // Error
-class ApiError extends Error {
+export class ApiError extends Error {
   status?: number;
   url?: string;
   payload?: any;
