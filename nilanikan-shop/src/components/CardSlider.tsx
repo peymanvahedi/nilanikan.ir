@@ -32,12 +32,17 @@ export default function CardSlider({
   return (
     <section className={className} dir="rtl">
       {(title || ctaHref) && (
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-4 flex items-center justify-between">
           {title && (
-            <h2 className="text-base md:text-lg font-extrabold">{title}</h2>
+            <h2 className="text-xl md:text-2xl font-extrabold text-slate-900">
+              {title}
+            </h2>
           )}
           {ctaHref && (
-            <Link href={ctaHref} className="underline text-sm">
+            <Link
+              href={ctaHref}
+              className="inline-flex h-9 px-4 items-center justify-center rounded-lg bg-pink-600 text-white text-sm font-extrabold shadow hover:bg-pink-700 focus:outline-none focus:ring-2 focus:ring-pink-500"
+            >
               {ctaText}
             </Link>
           )}
@@ -50,7 +55,6 @@ export default function CardSlider({
             key={`${it.id ?? it.slug ?? idx}`}
             item={{
               ...it,
-              // در صورت نیاز روبان را تزریق می‌کنیم تا همه کارت‌ها یکدست باشند
               ribbon: it?.ribbon ?? itemRibbon,
               ribbonTone: it?.ribbonTone ?? itemRibbonTone,
             }}

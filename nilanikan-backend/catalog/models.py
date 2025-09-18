@@ -86,6 +86,20 @@ class ProductImage(models.Model):
     def __str__(self) -> str:
         return f"Image for {self.product.name}"
 
+class ProductImage(models.Model):
+    """گالری تصاویر برای هر محصول"""
+    product = models.ForeignKey(
+        Product, on_delete=models.CASCADE, related_name="gallery"
+    )
+    image = models.ImageField(upload_to=product_image_upload_to)
+
+    # ✅ جدید: نگهداری لینک نسخه‌های WebP و thumbnail
+    image_variants = models.JSONField(blank=True, null=True, default=dict)
+
+    alt = models.CharField(max_length=200, blank=True, null=True)
+    order = models.PositiveIntegerField(default=0)
+    is_primary = models.BooleanField(default=False)
+
 
 # ---------- Product Videos ----------
 def product_video_upload_to(instance, filename: str) -> str:

@@ -101,9 +101,13 @@ export default function NilaNikanSetsSlider({
     <section className="w-full" dir="rtl" aria-label={title}>
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-xl md:text-2xl font-extrabold text-slate-900">{title}</h2>
-        <Link href={allLink} className="text-sm font-bold text-pink-600 hover:text-pink-700">
-          مشاهده همه
-        </Link>
+        <Link
+  href={allLink}
+  className="inline-flex h-9 items-center rounded-lg bg-pink-600 px-3 text-white text-sm font-bold hover:bg-pink-700"
+>
+  مشاهده همه
+</Link>
+
       </div>
 
       <div className="relative">

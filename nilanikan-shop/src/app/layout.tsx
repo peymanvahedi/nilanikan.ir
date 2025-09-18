@@ -4,7 +4,8 @@ import "./globals.css";
 
 import Header from "@/components/Header";
 import ClientProviders from "@/components/ClientProviders";
-import Footer from "@/components/Footer"; // ✅ اضافه شد
+import Footer from "@/components/Footer";
+import GoftinoWidget from "@/components/GoftinoWidget"; // ✅ افزودن ویجت گفتینو
 
 export const metadata: Metadata = {
   title: "فروشگاه نیلانیکان",
@@ -27,8 +28,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ClientProviders>
           <Header />
           <main className="min-h-[calc(100vh-80px)]">{children}</main>
-          <Footer />   {/* ✅ فوتر پیشرفته */}
+          <Footer />
         </ClientProviders>
+
+        {/* ✅ گفتینو همیشه بعد از محتوای صفحه لود می‌شود */}
+        <GoftinoWidget />
       </body>
     </html>
   );

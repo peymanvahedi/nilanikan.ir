@@ -5,12 +5,24 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+import { NAV, NavItem } from "@/lib/nav";
 
-type Cat = { href: string; label: string; icon?: React.ReactNode };
+type Cat = { href?: string; label: string; icon?: React.ReactNode; children?: Cat[] };
 type Raw = any;
 
 const MENU_ENDPOINTS = ["/api/v1/menu", "/api/categories/menu/"];
 const MEDIA_BASE = process.env.NEXT_PUBLIC_MEDIA_BASE || process.env.NEXT_PUBLIC_API_BASE || "";
+
+// دادهٔ محلی NAV → ساختار داخلی منو
+function navToCat(items: NavItem[] = []): Cat[] {
+  const toCat = (n: NavItem): Cat => ({
+    href: n.href,
+    label: n.label,
+    icon: undefined,
+    children: n.children?.map(toCat),
+  });
+  return items.map(toCat);
+}
 
 // مسیر صفحهٔ محصول و دسته‌بندی را اینجا تنظیم کن
 const PRODUCT_PREFIX = "/product";
@@ -161,6 +173,7 @@ export default function Header() {
           const data = await res.json();
           const list = pickList(data);
           if (!Array.isArray(list) || list.length === 0) continue;
+
           const mapped: Cat[] = list
             .map((raw) => ({
               href: toHref(raw),
@@ -175,13 +188,25 @@ export default function Header() {
                   unoptimized
                 />
               ) : undefined,
+              // اگر API شما children دارد می‌توانید اینجا map کنید
+              // children: Array.isArray(raw.children) ? raw.children.map(...) : undefined,
             }))
-            .filter((x) => x.label && x.href);
-          if (mapped.length && mounted) setCategories(mapped);
-          break;
+            .filter((x) => x.label && (x.href || true));
+
+          if (mapped.length && mounted) {
+            setCategories(mapped);
+            return; // از اولین منبع معتبر استفاده می‌کنیم
+          }
         } catch {}
       }
+
+      // Fallback: اگر از API چیزی نگرفتیم از NAV محلی استفاده کن
+      if (mounted) {
+        const mapped = navToCat(NAV);
+        if (mapped.length) setCategories(mapped);
+      }
     })();
+
     return () => {
       mounted = false;
     };
@@ -380,7 +405,7 @@ export default function Header() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            onBlur={() => setTimeout(() => setSearchResults([]), 120)} // اختیاری: جمع شدن با blur
+            onBlur={() => setTimeout(() => setSearchResults([]), 120)}
             placeholder="جست‌وجو..."
             className="w-full h-11 rounded-xl border border-zinc-300 pr-10 pl-12 outline-none focus:ring-2 ring-pink-200"
           />
@@ -396,28 +421,59 @@ export default function Header() {
       </div>
 
       {/* منوی دسته‌بندی دسکتاپ */}
-{categories.length > 0 && (
-  <div className="bg-zinc-900 text-white">
-    <nav
-      className="mx-auto max-w-6xl px-4 hidden md:block"
-      data-testid="nav" // ✅ اضافه شد
-    >
-      <div className="flex items-center gap-6 overflow-x-auto no-scrollbar py-3 text-sm">
-        {categories.map((c) => (
-          <Link
-            key={c.href}
-            href={c.href}
-            className="whitespace-nowrap hover:text-pink-400 transition"
-            title={c.label}
-          >
-            {c.icon} {c.label}
-          </Link>
-        ))}
-      </div>
-    </nav>
-  </div>
-)}
+      {categories.length > 0 && (
+        <div className="bg-zinc-900 text-white">
+          <nav className="mx-auto max-w-6xl px-4 hidden md:block" data-testid="nav">
+            <div className="flex items-center gap-6 overflow-x-auto no-scrollbar py-3 text-sm">
+              {categories.map((c) => (
+                <div key={c.label} className="relative group">
+                  {c.href ? (
+                    <Link
+                      href={c.href}
+                      className="whitespace-nowrap hover:text-pink-400 transition inline-block py-2"
+                      title={c.label}
+                    >
+                      {c.icon} {c.label}
+                    </Link>
+                  ) : (
+                    <span className="whitespace-nowrap inline-block py-2">{c.label}</span>
+                  )}
 
+                  {c.children && c.children.length > 0 && (
+                    <div className="absolute right-0 mt-2 hidden group-hover:block bg-white text-zinc-900 rounded-xl shadow-lg p-3 min-w-56 z-40">
+                      <ul className="space-y-1">
+                        {c.children.map((sub) => (
+                          <li key={sub.label}>
+                            {sub.href ? (
+                              <Link href={sub.href} className="block px-3 py-2 rounded-lg hover:bg-zinc-100">
+                                {sub.label}
+                              </Link>
+                            ) : (
+                              <span className="block px-3 py-2 font-semibold">{sub.label}</span>
+                            )}
+
+                            {sub.children && sub.children.length > 0 && (
+                              <ul className="mt-1 ps-3 border-s">
+                                {sub.children.map((leaf) => (
+                                  <li key={leaf.label}>
+                                    <Link href={leaf.href || "#"} className="block px-3 py-2 rounded-lg hover:bg-zinc-100">
+                                      {leaf.label}
+                                    </Link>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </nav>
+        </div>
+      )}
 
       {/* موبایل */}
       <div className="md:hidden mx-auto px-4 h-14 flex items-center justify-between gap-2">
@@ -461,17 +517,77 @@ export default function Header() {
                   {CloseIcon}
                 </button>
               </div>
+
+              {/* لینک‌های سریع (گرید) */}
               <div className="grid grid-cols-2 gap-3">
                 {categories.map((c) => (
                   <Link
-                    key={c.href}
-                    href={c.href}
+                    key={c.label}
+                    href={c.href || "#"}
                     onClick={() => setShowCat(false)}
                     className="rounded-xl border border-zinc-200 p-3 flex items-center gap-3 hover:border-pink-300 active:scale-[0.98] transition"
                   >
                     <span className="w-10 h-10 rounded-lg bg-pink-50 text-pink-600 grid place-items-center text-lg">{c.icon ?? "•"}</span>
                     <span className="text-sm font-semibold text-zinc-800">{c.label}</span>
                   </Link>
+                ))}
+              </div>
+
+              {/* زیرمنوهای موبایل (تودرتو، باز/بسته‌شونده) */}
+              <div className="mt-4">
+                {categories.map((c) => (
+                  <div key={c.label} className="mb-1">
+                    {c.children && c.children.length > 0 ? (
+                      <details className="group">
+                        <summary className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-zinc-50 cursor-pointer">
+                          <span>{c.label}</span>
+                          <span className="text-xs opacity-70 group-open:rotate-180 transition">⌄</span>
+                        </summary>
+                        <div className="ps-4 py-1 space-y-1">
+                          {c.children.map((sub) => (
+                            <div key={sub.label}>
+                              {sub.children && sub.children.length > 0 ? (
+                                <details className="group">
+                                  <summary className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-zinc-50 cursor-pointer">
+                                    <span>{sub.label}</span>
+                                    <span className="text-xs opacity-70 group-open:rotate-180 transition">⌄</span>
+                                  </summary>
+                                  <div className="ps-4 py-1 space-y-1">
+                                    {sub.children.map((leaf) => (
+                                      <Link
+                                        key={leaf.label}
+                                        href={leaf.href || "#"}
+                                        onClick={() => setShowCat(false)}
+                                        className="block px-3 py-2 rounded-lg hover:bg-zinc-50"
+                                      >
+                                        {leaf.label}
+                                      </Link>
+                                    ))}
+                                  </div>
+                                </details>
+                              ) : (
+                                <Link
+                                  href={sub.href || "#"}
+                                  onClick={() => setShowCat(false)}
+                                  className="block px-3 py-2 rounded-lg hover:bg-zinc-50"
+                                >
+                                  {sub.label}
+                                </Link>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    ) : (
+                      <Link
+                        href={c.href || "#"}
+                        onClick={() => setShowCat(false)}
+                        className="block px-3 py-2 rounded-lg hover:bg-zinc-50"
+                      >
+                        {c.label}
+                      </Link>
+                    )}
+                  </div>
                 ))}
               </div>
             </div>

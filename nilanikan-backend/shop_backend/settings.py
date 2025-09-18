@@ -46,7 +46,7 @@ INSTALLED_APPS = [
 
     # Local apps
     "accounts",
-    "catalog",
+    "catalog.apps.CatalogConfig",
     "orders",
     "coupons",
     "support",
