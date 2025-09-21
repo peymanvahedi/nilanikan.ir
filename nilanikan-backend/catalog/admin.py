@@ -1,23 +1,26 @@
 from django.contrib import admin
-from .models import MenuItem
 from django.utils.html import format_html
+from django.utils.formats import number_format
+from django import forms
+
 from .models import (
+    MenuItem,
     Category,
     Product,
     ProductImage,
-    ProductVideo,  # ← اضافه شد
+    ProductVideo,
     Bundle,
     BundleImage,
-    BundleVideo,   # ← اضافه شد
+    BundleVideo,
     Banner,
     Attribute,
     AttributeValue,
     ProductVariant,
 )
 
-# ---------------------------
+# =========================
 # Category (منوی قابل مدیریت)
-# ---------------------------
+# =========================
 @admin.register(Category)
 class CategoryAdmin(admin.ModelAdmin):
     list_display = (
@@ -59,14 +62,13 @@ class CategoryAdmin(admin.ModelAdmin):
     image_thumb.short_description = "تصویر"
 
     def image_thumb_readonly(self, obj):
-        # برای نمایش پیش‌نمایش در فرم جزئیات
         return self.image_thumb(obj)
     image_thumb_readonly.short_description = "پیش‌نمایش تصویر"
 
 
-# ---------------------------
+# =========================
 # Product + Gallery Inline
-# ---------------------------
+# =========================
 class ProductImageInline(admin.TabularInline):
     model = ProductImage
     extra = 2
@@ -93,7 +95,6 @@ class ProductVideoInline(admin.TabularInline):
     readonly_fields = ("preview",)
 
     def preview(self, obj):
-        # اگر کاور هست نشان بده؛ وگرنه لینک فایل/خارجی
         thumb = getattr(obj, "thumbnail", None)
         if thumb:
             try:
@@ -109,32 +110,87 @@ class ProductVideoInline(admin.TabularInline):
     preview.short_description = "پیش‌نمایش"
 
 
-# ---------------------------
+# =========================
 # Product Variants Inline
-# ---------------------------
+# =========================
 class ProductVariantInline(admin.TabularInline):
     model = ProductVariant
     extra = 1
     autocomplete_fields = ("size",)
 
 
+# -------------------------
+# فرم ادمینِ Product
+# هدف: نمایش بدون ".00" در ورودی‌ها
+# -------------------------
+class ProductForm(forms.ModelForm):
+    class Meta:
+        model = Product
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        """
+        مقدار اولیه‌ی price/discount_price را نرمال می‌کنیم تا
+        صفرهای اعشاری انتهایی حذف شوند؛ مثلاً 5000.00 → 5000
+        اما اگر اعشاری واقعی وجود داشته باشد نگه می‌داریم؛ 5000.75 → 5000.75
+        """
+        super().__init__(*args, **kwargs)
+
+        def normalize_decimal(value):
+            try:
+                # Decimal.normalize() صفرهای اضافی را حذف می‌کند
+                v = value.normalize()
+                # نمایش علمی را به نمایش معمولی برگردانیم (مثلاً 1E+4 → 10000)
+                return format(v, 'f')
+            except Exception:
+                return value
+
+        if self.instance and getattr(self.instance, "pk", None):
+            if "price" in self.fields and getattr(self.instance, "price", None) is not None:
+                self.initial["price"] = normalize_decimal(self.instance.price)
+
+            if "discount_price" in self.fields and getattr(self.instance, "discount_price", None) is not None:
+                self.initial["discount_price"] = normalize_decimal(self.instance.discount_price)
+
+        # ورودی عددی را دوستانه‌تر کنیم
+        for fname in ("price", "discount_price"):
+            if fname in self.fields:
+                self.fields[fname].localize = True
+                self.fields[fname].widget.is_localized = True
+                # اجازه‌ی اعشار (در صورت نیاز)؛ اگر اعشار نمی‌خواهید step=1 بگذارید
+                self.fields[fname].widget.attrs.update({
+                    "inputmode": "decimal",
+                    "step": "0.01",
+                    "min": "0",
+                })
+
+
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
+    form = ProductForm
+
     list_display = (
         "id", "name", "sku", "category",
-        "price", "stock", "is_active", "is_recommended",
+        "price_display", "stock", "is_active", "is_recommended",
     )
     list_filter = ("is_active", "is_recommended", "category")
     list_editable = ("is_active", "is_recommended")
     search_fields = ("name", "sku", "slug")
     prepopulated_fields = {"slug": ("name",)}
-    inlines = [ProductImageInline, ProductVideoInline, ProductVariantInline]  # ← ویدیو اضافه شد
+    inlines = [ProductImageInline, ProductVideoInline, ProductVariantInline]
     filter_horizontal = ("attributes",)
 
+    # نمایش قیمت با جداکننده هزار و حذف اعشار صفر
+    def price_display(self, obj):
+        # اگر قیمت 5000.00 باشد → "5,000"
+        # اگر 5000.75 باشد → "5,000.75"
+        return number_format(obj.price, decimal_pos=None, use_l10n=True)
+    price_display.short_description = "قیمت"
 
-# ---------------------------
+
+# =========================
 # Bundle + Gallery Inline
-# ---------------------------
+# =========================
 class BundleImageInline(admin.TabularInline):
     model = BundleImage
     extra = 3
@@ -187,12 +243,12 @@ class BundleAdmin(admin.ModelAdmin):
     search_fields = ("title", "slug")
     prepopulated_fields = {"slug": ("title",)}
     filter_horizontal = ("products",)
-    inlines = [BundleImageInline, BundleVideoInline]  # ← ویدیو اضافه شد
+    inlines = [BundleImageInline, BundleVideoInline]
 
 
-# ---------------------------
+# =========================
 # Banner
-# ---------------------------
+# =========================
 @admin.register(Banner)
 class BannerAdmin(admin.ModelAdmin):
     list_display = ("id", "alt", "is_active", "order", "created_at")
@@ -201,9 +257,9 @@ class BannerAdmin(admin.ModelAdmin):
     list_filter = ("is_active",)
 
 
-# ---------------------------
+# =========================
 # Attribute & AttributeValue
-# ---------------------------
+# =========================
 @admin.register(Attribute)
 class AttributeAdmin(admin.ModelAdmin):
     list_display = ("name", "slug", "type")
@@ -218,11 +274,14 @@ class AttributeValueAdmin(admin.ModelAdmin):
     prepopulated_fields = {"slug": ("value",)}
 
 
+# =========================
+# MenuItem
+# =========================
 @admin.register(MenuItem)
 class MenuItemAdmin(admin.ModelAdmin):
-    list_display = ("id","name","parent","device","sort_order","is_active")
-    list_editable = ("device","sort_order","is_active")
-    list_filter   = ("device","is_active","parent")
-    search_fields = ("name","slug","url")
-    autocomplete_fields = ("parent","category")
+    list_display = ("id", "name", "parent", "device", "sort_order", "is_active")
+    list_editable = ("device", "sort_order", "is_active")
+    list_filter   = ("device", "is_active", "parent")
+    search_fields = ("name", "slug", "url")
+    autocomplete_fields = ("parent", "category")
     prepopulated_fields = {"slug": ("name",)}

@@ -1,4 +1,3 @@
-# shop_backend/settings.py
 import os
 from pathlib import Path
 from dotenv import load_dotenv
@@ -6,7 +5,6 @@ from datetime import timedelta
 
 load_dotenv()
 
-# ---------- Helpers ----------
 def _split_env_list(name, default=""):
     val = os.getenv(name, default)
     return [x.strip() for x in val.split(",") if x.strip()]
@@ -17,20 +15,21 @@ def _env_bool(name, default=False):
         return default
     return val.lower() in ("1", "true", "yes", "on")
 
-# ---------- Base ----------
 BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-insecure-change-me")
 DEBUG = _env_bool("DJANGO_DEBUG", True)
 
 # ---------- Hosts ----------
-ALLOWED_HOSTS = _split_env_list(
-    "ALLOWED_HOSTS",
-    "127.0.0.1,localhost,0.0.0.0,192.168.103.17,backend,frontend"
-)
+ALLOWED_HOSTS = [
+    '192.168.69.17',     # ← IP جدید
+    '127.0.0.1',
+    'localhost',
+    '0.0.0.0',
+    'backend',
+    'frontend',
+]
 
-# ---------- Apps ----------
 INSTALLED_APPS = [
-    # Django
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -38,13 +37,11 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
 
-    # 3rd-party
     "corsheaders",
     "rest_framework",
     "rest_framework.authtoken",
     "channels",
 
-    # Local apps
     "accounts",
     "catalog.apps.CatalogConfig",
     "orders",
@@ -56,7 +53,6 @@ INSTALLED_APPS = [
     "chat",
 ]
 
-# ---------- Middleware ----------
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
@@ -71,7 +67,6 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "shop_backend.urls"
 
-# ---------- Templates ----------
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
@@ -91,7 +86,6 @@ TEMPLATES = [
 WSGI_APPLICATION = "shop_backend.wsgi.application"
 ASGI_APPLICATION = "shop_backend.asgi.application"
 
-# ---------- Database ----------
 DATABASE_URL = os.getenv("DATABASE_URL")
 if DATABASE_URL:
     import dj_database_url
@@ -115,7 +109,6 @@ if os.getenv("DB_ENGINE"):
         "CONN_MAX_AGE": 60,
     }
 
-# ---------- Passwords ----------
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
@@ -123,13 +116,11 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
-# ---------- I18N / TZ ----------
 LANGUAGE_CODE = "fa"
 TIME_ZONE = "Asia/Tehran"
 USE_I18N = True
 USE_TZ = True
 
-# ---------- Static / Media ----------
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STORAGES = {
@@ -140,7 +131,6 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# ---------- DRF / JWT ----------
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
@@ -159,7 +149,7 @@ SIMPLE_JWT = {
 CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:3000",
     "http://localhost:3000",
-    "http://192.168.103.17:3000",
+    "http://192.168.69.17:3000",  # ← IP جدید فرانت
 ]
 CORS_ALLOW_CREDENTIALS = True
 
@@ -168,7 +158,7 @@ CSRF_TRUSTED_ORIGINS = [
     "http://127.0.0.1:8000",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    "http://192.168.103.17:3000",
+    "http://192.168.69.17:3000",  # ← IP جدید فرانت
 ]
 
 USE_X_FORWARDED_HOST = True
@@ -178,17 +168,15 @@ SESSION_COOKIE_SECURE = False
 CSRF_COOKIE_SECURE = False
 APPEND_SLASH = True
 
-# ---------- Custom ----------
 GUEST_USER_ID = int(os.getenv("GUEST_USER_ID", "1"))
 
-# ---------- Zarinpal Integration ----------
 ZARINPAL_MODE = os.getenv("ZARINPAL_MODE", "sandbox").lower()
 ZARINPAL_MERCHANT_ID = os.getenv(
     "ZARINPAL_MERCHANT_ID",
     "7be9a33e-e18b-4731-9320-99c4a1053e92"
 )
 
-_default_host = os.getenv("LOCAL_HOST_IP", "192.168.103.17")
+_default_host = os.getenv("LOCAL_HOST_IP", "192.168.69.17")
 ZARINPAL_CALLBACK_URL = os.getenv(
     "ZARINPAL_CALLBACK_URL",
     f"http://{_default_host}:8000/api/orders/payment/callback/"
@@ -202,16 +190,6 @@ ZARINPAL_FAIL_REDIRECT = os.getenv(
     f"http://{_default_host}:3000/checkout/fail"
 )
 
-# ---------- Channels ----------
-CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels.layers.InMemoryChannelLayer"
-    }
-}
-
-
-
-# ---------- Channels ----------
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels.layers.InMemoryChannelLayer"

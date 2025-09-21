@@ -1,4 +1,3 @@
-# shop_backend/urls.py
 from django.contrib import admin
 from django.urls import path, include
 from django.views.generic import RedirectView
@@ -14,6 +13,7 @@ from catalog.views import (
     home_view,
     ProductVideoViewSet,
     BundleVideoViewSet,
+    menu_view,          # ← اضافه شد
 )
 from orders.views import CartViewSet, OrderViewSet
 from coupons.views import CouponViewSet
@@ -49,6 +49,9 @@ urlpatterns = [
 
     path("api/home/", home_view, name="home"),
 
+    # 🔑 منوی ادمین (خروجی JSON برای هدر فرانت)
+    path("api/v1/menu/", menu_view, name="menu"),
+
     path("api/auth/me/",       MeView.as_view(),       name="me"),
     path("api/auth/register/", RegisterView.as_view(), name="register"),
     path("api/auth/login/",    LoginView.as_view(),    name="login"),
@@ -56,7 +59,7 @@ urlpatterns = [
 
     path("api/", include("stories.urls")),
     path("api/", include("reviews.urls")),
-    path("api/chat/", include("chat.urls")),  # ← اضافه شده
+    path("api/chat/", include("chat.urls")),
 
     path("api/health/", health, name="health"),
 ]

@@ -5,15 +5,15 @@ from .models import (
     Category,
     Product,
     ProductImage,
-    ProductVideo,   # ← اضافه شد
+    ProductVideo,
     Bundle,
     BundleImage,
-    BundleVideo,    # ← اضافه شد
+    BundleVideo,
     AttributeValue,
     ProductVariant,
+    MenuItem,     # ← اضافه شد
 )
 from stories.models import Story
-
 
 # ------------------------- Helpers -------------------------
 def abs_url(request, url: Optional[str]) -> Optional[str]:
@@ -28,10 +28,8 @@ def abs_url(request, url: Optional[str]) -> Optional[str]:
         return request.build_absolute_uri(url)
     return url
 
-
 def product_link(obj: Product) -> str:
     return f"/product/{obj.slug}/" if getattr(obj, "slug", None) else f"/product/{obj.pk}/"
-
 
 def product_prices(obj: Product) -> Tuple[Optional[float], Optional[float]]:
     price = getattr(obj, "price", None)
@@ -40,9 +38,7 @@ def product_prices(obj: Product) -> Tuple[Optional[float], Optional[float]]:
         return float(discount), float(price) if price is not None else None
     return float(price) if price is not None else None, None
 
-
 def safe_file_url(f) -> str:
-    """برگشت url فقط اگر فایل واقعا وجود داشت"""
     try:
         if f and getattr(f, "name", ""):
             return f.url
@@ -50,15 +46,12 @@ def safe_file_url(f) -> str:
         pass
     return ""
 
-
-# ------------------------- Category (General) -------------------------
+# ------------------------- Category -------------------------
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
         fields = ["id", "name", "slug", "description", "parent"]
 
-
-# ------------------------- Category (Detail for Frontend page header) -------------------------
 class CategoryDetailSerializer(serializers.ModelSerializer):
     icon = serializers.SerializerMethodField()
     image = serializers.SerializerMethodField()
@@ -75,8 +68,6 @@ class CategoryDetailSerializer(serializers.ModelSerializer):
         req = self.context.get("request")
         return abs_url(req, safe_file_url(getattr(obj, "image", None))) or ""
 
-
-# ------------------------- Category (Menu Tree) -------------------------
 class MenuCategorySerializer(serializers.ModelSerializer):
     children = serializers.SerializerMethodField()
 
@@ -88,7 +79,6 @@ class MenuCategorySerializer(serializers.ModelSerializer):
         qs = obj.children.filter(is_active=True, show_in_menu=True).order_by("menu_order", "name")
         return MenuCategorySerializer(qs, many=True, context=self.context).data
 
-
 # ------------------------- Attribute Values -------------------------
 class AttributeValueSerializer(serializers.ModelSerializer):
     attribute = serializers.CharField(source="attribute.name")
@@ -96,7 +86,6 @@ class AttributeValueSerializer(serializers.ModelSerializer):
     class Meta:
         model = AttributeValue
         fields = ["id", "attribute", "value", "slug", "color_code"]
-
 
 # ------------------------- Product Images -------------------------
 class ProductImageSerializer(serializers.ModelSerializer):
@@ -109,7 +98,6 @@ class ProductImageSerializer(serializers.ModelSerializer):
     def get_image(self, obj):
         req = self.context.get("request")
         return abs_url(req, safe_file_url(getattr(obj, "image", None)))
-
 
 # ------------------------- Product Videos -------------------------
 class ProductVideoSerializer(serializers.ModelSerializer):
@@ -130,7 +118,6 @@ class ProductVideoSerializer(serializers.ModelSerializer):
         req = self.context.get("request")
         return abs_url(req, safe_file_url(getattr(obj, "thumbnail", None))) or ""
 
-
 # ------------------------- Product Variants -------------------------
 class ProductVariantSerializer(serializers.ModelSerializer):
     size = AttributeValueSerializer()
@@ -139,12 +126,11 @@ class ProductVariantSerializer(serializers.ModelSerializer):
         model = ProductVariant
         fields = ["id", "size", "price", "stock"]
 
-
-# ------------------------- Product (Full/Admin) -------------------------
+# ------------------------- Product -------------------------
 class ProductSerializer(serializers.ModelSerializer):
     image = serializers.SerializerMethodField()
     gallery = ProductImageSerializer(many=True, read_only=True)
-    videos = ProductVideoSerializer(many=True, read_only=True)  # ← اضافه شد
+    videos = ProductVideoSerializer(many=True, read_only=True)
     is_recommended = serializers.BooleanField(read_only=False)
     attributes = AttributeValueSerializer(many=True, read_only=True)
     variants = ProductVariantSerializer(many=True, read_only=True)
@@ -152,20 +138,17 @@ class ProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product
         fields = [
-            "id", "name", "slug", "sku", "category",
-            "price", "discount_price", "description",
-            "image", "gallery", "videos",    # ← ویدیوها
-            "stock", "is_active", "is_recommended", "created_at",
-            "attributes", "size_chart",
-            "variants",
+            "id","name","slug","sku","category",
+            "price","discount_price","description",
+            "image","gallery","videos",
+            "stock","is_active","is_recommended","created_at",
+            "attributes","size_chart","variants",
         ]
 
     def get_image(self, obj):
         req = self.context.get("request")
         return abs_url(req, safe_file_url(getattr(obj, "image", None)))
 
-
-# ------------------------- Product (Frontend/List Item) -------------------------
 class ProductItemSerializer(serializers.ModelSerializer):
     title = serializers.SerializerMethodField()
     imageUrl = serializers.SerializerMethodField()
@@ -179,9 +162,8 @@ class ProductItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product
         fields = [
-            "id", "title", "imageUrl", "image",
-            "price", "compareAtPrice", "link", "badge",
-            "is_recommended",
+            "id","title","imageUrl","image",
+            "price","compareAtPrice","link","badge","is_recommended",
         ]
 
     def get_title(self, obj):
@@ -191,18 +173,15 @@ class ProductItemSerializer(serializers.ModelSerializer):
         req = self.context.get("request")
         return abs_url(req, safe_file_url(getattr(obj, "image", None))) or ""
 
-    def get_imageUrl(self, obj):
-        return self._img(obj)
-
-    def get_image(self, obj):
-        return self._img(obj)
+    def get_imageUrl(self, obj): return self._img(obj)
+    def get_image(self, obj): return self._img(obj)
 
     def get_price(self, obj):
-        price, _compare = product_prices(obj)
+        price, _ = product_prices(obj)
         return price or 0
 
     def get_compareAtPrice(self, obj):
-        _price, compare = product_prices(obj)
+        _, compare = product_prices(obj)
         return compare
 
     def get_link(self, obj):
@@ -219,28 +198,23 @@ class ProductItemSerializer(serializers.ModelSerializer):
                 return "OFF"
         return None
 
-
-# ------------------------- Bundle Images -------------------------
+# ------------------------- Bundle -------------------------
 class BundleImageSerializer(serializers.ModelSerializer):
     image = serializers.SerializerMethodField()
-
     class Meta:
         model = BundleImage
-        fields = ["id", "image", "alt", "order", "is_primary"]
+        fields = ["id","image","alt","order","is_primary"]
 
     def get_image(self, obj):
         req = self.context.get("request")
         return abs_url(req, safe_file_url(getattr(obj, "image", None)))
 
-
-# ------------------------- Bundle Videos -------------------------
 class BundleVideoSerializer(serializers.ModelSerializer):
     url = serializers.SerializerMethodField()
     thumbnailUrl = serializers.SerializerMethodField()
-
     class Meta:
         model = BundleVideo
-        fields = ["id", "title", "url", "thumbnailUrl", "order", "is_primary", "created_at"]
+        fields = ["id","title","url","thumbnailUrl","order","is_primary","created_at"]
 
     def get_url(self, obj):
         req = self.context.get("request")
@@ -252,12 +226,10 @@ class BundleVideoSerializer(serializers.ModelSerializer):
         req = self.context.get("request")
         return abs_url(req, safe_file_url(getattr(obj, "thumbnail", None))) or ""
 
-
-# ------------------------- Bundle -------------------------
 class BundleSerializer(serializers.ModelSerializer):
     products = ProductItemSerializer(many=True, read_only=True)
     gallery = BundleImageSerializer(many=True, read_only=True)
-    videos = BundleVideoSerializer(many=True, read_only=True)  # ← اضافه شد
+    videos = BundleVideoSerializer(many=True, read_only=True)
     image = serializers.SerializerMethodField()
     images = serializers.SerializerMethodField()
     is_recommended = serializers.BooleanField(read_only=False)
@@ -265,9 +237,9 @@ class BundleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Bundle
         fields = [
-            "id", "title", "slug",
-            "products", "bundle_price", "image", "gallery", "images", "videos",  # ← ویدیوها
-            "active", "is_recommended", "created_at",
+            "id","title","slug","products","bundle_price",
+            "image","gallery","images","videos",
+            "active","is_recommended","created_at",
         ]
 
     def get_image(self, obj):
@@ -278,29 +250,51 @@ class BundleSerializer(serializers.ModelSerializer):
         req = self.context.get("request")
         out = []
         cover = abs_url(req, safe_file_url(getattr(obj, "image", None)))
-        if cover:
-            out.append(cover)
+        if cover: out.append(cover)
         for gi in getattr(obj, "gallery", []).all() if hasattr(obj, "gallery") else []:
             url = abs_url(req, safe_file_url(getattr(gi, "image", None)))
-            if url:
-                out.append(url)
-        seen = set()
-        uniq = []
+            if url: out.append(url)
+        seen, uniq = set(), []
         for u in out:
             if u not in seen:
-                uniq.append(u)
-                seen.add(u)
+                uniq.append(u); seen.add(u)
         return uniq
-
 
 # ------------------------- Story -------------------------
 class StorySerializer(serializers.ModelSerializer):
     imageUrl = serializers.SerializerMethodField()
-
     class Meta:
         model = Story
-        fields = ["id", "title", "imageUrl", "link", "created_at"]
+        fields = ["id","title","imageUrl","link","created_at"]
 
     def get_imageUrl(self, obj):
         req = self.context.get("request")
         return abs_url(req, safe_file_url(getattr(obj, "image", None))) or ""
+
+# ------------------------- MenuItem (Navigation) -------------------------
+class MenuItemSerializer(serializers.ModelSerializer):
+    label = serializers.CharField(source="name")
+    href  = serializers.SerializerMethodField()
+    icon  = serializers.SerializerMethodField()
+    children = serializers.SerializerMethodField()
+
+    class Meta:
+        model = MenuItem
+        fields = ["id", "label", "href", "icon", "children"]
+
+    def get_href(self, obj):
+        if obj.url:
+            return obj.url if obj.url.startswith("/") else f"/{obj.url}"
+        if obj.category_id and obj.category.slug:
+            return f"/category/{obj.category.slug}"
+        if obj.slug:
+            return f"/category/{obj.slug}"
+        return None
+
+    def get_icon(self, obj):
+        req = self.context.get("request")
+        return abs_url(req, safe_file_url(getattr(obj, "icon", None))) or None
+
+    def get_children(self, obj):
+        qs = obj.children.filter(is_active=True).order_by("sort_order", "id")
+        return MenuItemSerializer(qs, many=True, context=self.context).data

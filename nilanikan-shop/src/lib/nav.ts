@@ -1,31 +1,26 @@
 // src/lib/nav.ts
-// ساختار منو/زیرمنو به صورت داده‌محور (قابل ویرایش شما)
+
 export type NavItem = {
   label: string;
   href?: string;
-  icon?: string; // نام آیکن یا URL (اختیاری)
+  icon?: string; // آیکن فقط برای دسته‌بندی‌های اصلی
   children?: NavItem[];
 };
 
-// 🎯 نمونه: این‌ها را مطابق نیاز خودتان ویرایش/گسترش دهید
 export const NAV: NavItem[] = [
   {
-    label: "محصولات",
-    href: "/products",
+    label: "پوشاک کودک",
+    href: "/category/kids",
+    icon: "Shirt", // آیکن متناسب با پوشاک
     children: [
-      { label: "کالای دیجیتال", href: "/category/digital" },
-      { label: "خانگی و آشپزخانه", href: "/category/home" },
-      {
-        label: "مد و پوشاک",
-        href: "/category/fashion",
-        children: [
-          { label: "زنانه", href: "/category/fashion/women" },
-          { label: "مردانه", href: "/category/fashion/men" },
-          { label: "بچگانه", href: "/category/fashion/kids" },
-        ],
-      },
+      { label: "لباس زیر بچگانه", href: "http://192.168.103.17:3000/product/gdd" },
+      { label: "شلوار", href: "/category/kids/pants" },
+      { label: "پوشاک پاییزه و زمستانه", href: "/category/kids/fall-winter" },
+      { label: "پوشاک بهاره و تابستانه", href: "/category/kids/spring-summer" },
+      { label: "لباس مخصوص 3 تا 18 ماه", href: "/category/kids/3-18months" },
+      { label: "حراج بزرگ تک سایز 60 درصد", href: "/category/kids/sale-60" },
+      { label: "لباس مجلسی", href: "/category/kids/party" },
+      { label: "ست ها", href: "/category/kids/sets" },
     ],
   },
-  { label: "تخفیف‌ها", href: "/offers" },
-  { label: "درباره ما", href: "/about" },
 ];

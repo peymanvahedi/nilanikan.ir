@@ -9,9 +9,9 @@ const nextConfig = {
 
   images: {
     remotePatterns: [
-      // ────── هاست بک‌اند روی شبکهٔ محلی ──────
-      { protocol: "http", hostname: "192.168.103.17", port: "8000", pathname: "/media/**" },
-      { protocol: "http", hostname: "192.168.103.17", port: "8000", pathname: "/static/**" },
+      // ────── هاست بک‌اند روی شبکهٔ محلی (IP جدید) ──────
+      { protocol: "http", hostname: "192.168.69.17", port: "8000", pathname: "/media/**" },
+      { protocol: "http", hostname: "192.168.69.17", port: "8000", pathname: "/static/**" },
 
       // ────── localhost (اختیاری) ──────
       { protocol: "http", hostname: "127.0.0.1", port: "8000", pathname: "/media/**" },
@@ -24,7 +24,8 @@ const nextConfig = {
   },
 
   async rewrites() {
-    const backend = process.env.NEXT_BACKEND_ORIGIN || "http://192.168.103.17:8000";
+    // آدرس بک‌اند رو روی IP جدید بگذار
+    const backend = process.env.NEXT_BACKEND_ORIGIN || "http://192.168.69.17:8000";
     return [
       { source: "/api/:path*", destination: `${backend}/api/:path*` },
       { source: "/media/:path*", destination: `${backend}/media/:path*` },

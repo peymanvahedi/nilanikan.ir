@@ -1,11 +1,11 @@
 // src/components/BundleItemPicker.tsx
 "use client";
 
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import Image from "next/image";
 import { addToCart } from "@/lib/cart";
 
-// ——— انواع مشترک با Tabs ———
+// ——— انواع مشترک ———
 type Attribute = { name?: string | null; value?: string | null };
 
 type BundleItem = {
@@ -34,10 +34,17 @@ type Props = {
 
   /** انتخاب‌های تب پایین: productId => لیست ویژگی‌های انتخاب‌شده */
   externalSelectedAttributes?: Record<number, Attribute[]>;
+
+  /** برای باز کردن پاپ‌آپ جزئیات محصول در صفحه‌ی باندل */
+  onRequestPreview?: (productId: number) => void;
 };
 
 function toFa(n: number) {
-  try { return n.toLocaleString("fa-IR"); } catch { return String(n); }
+  try {
+    return n.toLocaleString("fa-IR");
+  } catch {
+    return String(n);
+  }
 }
 
 /** ساخت لیبل خوانا برای نمایش ویژگی‌ها */
@@ -52,6 +59,7 @@ export default function BundleItemPicker({
   items,
   onSummaryChange,
   externalSelectedAttributes,
+  onRequestPreview,
 }: Props) {
   // وضعیت انتخاب و تعداد
   const [selected, setSelected] = useState<Record<number, { checked: boolean; qty: number }>>(() => {
@@ -63,31 +71,136 @@ export default function BundleItemPicker({
     return init;
   });
 
+  // ✅ قیمت پویا و ویژگی‌های انتخاب‌شده (که از پاپ‌آپ می‌آیند)
+  const [priceOverrides, setPriceOverrides] = useState<Record<number, number>>({});
+  const [attrSelections, setAttrSelections] = useState<Record<number, Attribute[]>>({});
+
+  // وقتی آیتم‌ها تغییر کنند، انتخاب‌های اولیه را هم‌تراز کن
+  useEffect(() => {
+    setSelected((prev) => {
+      const next: Record<number, { checked: boolean; qty: number }> = { ...prev };
+      for (const it of items) {
+        if (!next[it.productId]) {
+          next[it.productId] = { checked: true, qty: Math.max(1, Number(it.quantity ?? 1)) };
+        }
+      }
+      // آیتم‌های حذف‌شده از لیست را پاک کن
+      for (const idStr of Object.keys(next)) {
+        const id = Number(idStr);
+        if (!items.some((it) => it.productId === id)) {
+          delete next[id];
+        }
+      }
+      return next;
+    });
+
+    // سینک حذف برای override ها و ویژگی‌ها
+    setPriceOverrides((prev) => {
+      const clone = { ...prev };
+      for (const pid of Object.keys(clone).map(Number)) {
+        if (!items.some((it) => it.productId === pid)) delete clone[pid];
+      }
+      return clone;
+    });
+    setAttrSelections((prev) => {
+      const clone = { ...prev };
+      for (const pid of Object.keys(clone).map(Number)) {
+        if (!items.some((it) => it.productId === pid)) delete clone[pid];
+      }
+      return clone;
+    });
+  }, [items]);
+
   // کال‌بک پایدار برای Summary
   const callbackRef = useRef<Props["onSummaryChange"]>();
-  useEffect(() => { callbackRef.current = onSummaryChange; }, [onSummaryChange]);
+  useEffect(() => {
+    callbackRef.current = onSummaryChange;
+  }, [onSummaryChange]);
 
-  // آیتم‌های آماده برای سبد (ویژگی‌ها هم ضمیمه می‌شود)
+  // هلسپرها
+  const safeInt = (v: unknown, fallback = 1) => {
+    const n = Math.floor(Number(v));
+    return Number.isFinite(n) ? n : fallback;
+  };
+
+  const setQty = useCallback((id: number, q: number) => {
+    setSelected((s) => {
+      const clamped = Math.max(1, Math.min(99, safeInt(q, 1)));
+      return { ...s, [id]: { checked: s[id]?.checked ?? true, qty: clamped } };
+    });
+  }, []);
+
+  const inc = (id: number) => setQty(id, (selected[id]?.qty ?? 1) + 1);
+  const dec = (id: number) => setQty(id, (selected[id]?.qty ?? 1) - 1);
+  const toggle = (id: number) =>
+    setSelected((s) => ({ ...s, [id]: { checked: !s[id]?.checked, qty: s[id]?.qty || 1 } }));
+
+  // ✅ دریافت آیتم از QuickView (پاپ‌آپ صفحه‌ی باندل) — با attrs + unitPrice
+  useEffect(() => {
+    const onQuickAdd = (ev: Event) => {
+      const e = ev as CustomEvent<{
+        productId: number;
+        quantity: number;
+        attributes?: Attribute[];
+        unitPrice?: number;
+      }>;
+
+      const { productId, quantity, attributes, unitPrice } = e?.detail || {};
+      if (!productId) return;
+
+      // انتخاب و تعداد
+      setSelected((s) => ({
+        ...s,
+        [productId]: { checked: true, qty: Math.max(1, Number(quantity) || 1) },
+      }));
+
+      // ویژگی‌ها (اختیاری)
+      if (Array.isArray(attributes)) {
+        setAttrSelections((prev) => ({ ...prev, [productId]: attributes }));
+      }
+
+      // قیمت واحد داینامیک (اختیاری)
+      if (typeof unitPrice === "number" && Number.isFinite(unitPrice)) {
+        setPriceOverrides((prev) => ({ ...prev, [productId]: Math.max(0, Math.floor(unitPrice)) }));
+      }
+    };
+
+    document.addEventListener("bundle:addItemFromQuickView", onQuickAdd as EventListener);
+    return () => document.removeEventListener("bundle:addItemFromQuickView", onQuickAdd as EventListener);
+  }, []);
+
+  // آیتم‌های آماده برای سبد (با قیمت override و attrs)
   const selectedForCart = useMemo(() => {
-    const out: { id: number; name: string; price: number; image?: string | null; qty: number; attributes?: Attribute[] }[] = [];
+    const out: {
+      id: number;
+      name: string;
+      price: number;
+      image?: string | null;
+      qty: number;
+      attributes?: Attribute[];
+    }[] = [];
     for (const it of items) {
       const s = selected[it.productId];
       if (!s?.checked) continue;
       const qty = Math.max(1, Number(s.qty || 1));
+      const unit = priceOverrides[it.productId] ?? it.price; // ✅ قیمت پویا
       out.push({
         id: it.productId,
         name: it.name,
-        price: it.price,
+        price: unit,
         image: it.image ?? null,
         qty,
-        attributes: externalSelectedAttributes?.[it.productId] || [],
+        attributes: attrSelections[it.productId] || externalSelectedAttributes?.[it.productId] || [],
       });
     }
     return out;
-  }, [items, selected, externalSelectedAttributes]);
+  }, [items, selected, priceOverrides, attrSelections, externalSelectedAttributes]);
 
   // محاسبات مبلغ
-  const subtotal = useMemo(() => selectedForCart.reduce((sum, it) => sum + it.price * it.qty, 0), [selectedForCart]);
+  const subtotal = useMemo(
+    () => selectedForCart.reduce((sum, it) => sum + it.price * it.qty, 0),
+    [selectedForCart]
+  );
 
   const discountAmount = useMemo(() => {
     if (!discountType || !discountValue || subtotal <= 0) return 0;
@@ -97,20 +210,27 @@ export default function BundleItemPicker({
 
   const total = useMemo(() => Math.max(0, subtotal - discountAmount), [subtotal, discountAmount]);
   const selectedCount = selectedForCart.length;
-  const selectedQty = useMemo(() => selectedForCart.reduce((s, it) => s + it.qty, 0), [selectedForCart]);
+  const selectedQty = useMemo(
+    () => selectedForCart.reduce((s, it) => s + it.qty, 0),
+    [selectedForCart]
+  );
 
   // فراخوانی کال‌بک فقط هنگام تغییر واقعی
   const lastSummaryRef = useRef<Summary | null>(null);
-  const summary = useMemo<Summary>(() => ({ total, subtotal, discountAmount, selectedCount, selectedQty }), [total, subtotal, discountAmount, selectedCount, selectedQty]);
+  const summary = useMemo<Summary>(
+    () => ({ total, subtotal, discountAmount, selectedCount, selectedQty }),
+    [total, subtotal, discountAmount, selectedCount, selectedQty]
+  );
 
   useEffect(() => {
     const prev = lastSummaryRef.current;
-    const changed = !prev
-      || prev.total !== summary.total
-      || prev.subtotal !== summary.subtotal
-      || prev.discountAmount !== summary.discountAmount
-      || prev.selectedCount !== summary.selectedCount
-      || prev.selectedQty !== summary.selectedQty;
+    const changed =
+      !prev ||
+      prev.total !== summary.total ||
+      prev.subtotal !== summary.subtotal ||
+      prev.discountAmount !== summary.discountAmount ||
+      prev.selectedCount !== summary.selectedCount ||
+      prev.selectedQty !== summary.selectedQty;
 
     if (changed) {
       lastSummaryRef.current = summary;
@@ -118,33 +238,16 @@ export default function BundleItemPicker({
     }
   }, [summary]);
 
-  // هلسپرها
-  const safeInt = (v: unknown, fallback = 1) => {
-    const n = Math.floor(Number(v));
-    return Number.isFinite(n) ? n : fallback;
-  };
-
-  const setQty = (id: number, q: number) =>
-    setSelected((s) => {
-      const clamped = Math.max(1, Math.min(99, safeInt(q, 1)));
-      return { ...s, [id]: { checked: s[id]?.checked ?? true, qty: clamped } };
-    });
-
-  const inc = (id: number) => setQty(id, (selected[id]?.qty ?? 1) + 1);
-  const dec = (id: number) => setQty(id, (selected[id]?.qty ?? 1) - 1);
-  const toggle = (id: number) => setSelected((s) => ({ ...s, [id]: { checked: !s[id]?.checked, qty: s[id]?.qty || 1 } }));
-
   const addSelectedToCart = async () => {
     if (selectedForCart.length === 0) return;
     for (const it of selectedForCart) {
-      // ⬇️ attributes داخل آبجکت محصول پاس داده می‌شود
       await addToCart(
         {
           id: it.id,
           name: it.name,
           price: it.price,
           image: it.image ?? null,
-          // @ts-expect-error: extend cart item with attributes (اگر تایپ cart آپدیت شد، این خط را بردار)
+          // @ts-expect-error: extend cart item with attributes
           attributes: it.attributes || [],
         },
         it.qty
@@ -171,8 +274,12 @@ export default function BundleItemPicker({
         <div className="grid grid-cols-1 gap-3 min-w-0">
           {items.map((it) => {
             const state = selected[it.productId] || { checked: true, qty: 1 };
-            const attrs = externalSelectedAttributes?.[it.productId] || [];
+            const attrs =
+              attrSelections[it.productId] ||
+              externalSelectedAttributes?.[it.productId] ||
+              [];
             const hasAttrs = attrs.length > 0;
+            const unitPrice = priceOverrides[it.productId] ?? it.price; // ✅ نمایش قیمت override
 
             return (
               <div
@@ -195,12 +302,28 @@ export default function BundleItemPicker({
 
                 {/* نام + قیمت واحد + خلاصه ویژگی‌ها */}
                 <div className="min-w-0">
-                  <div className="text-sm font-bold text-zinc-900 line-clamp-2">{it.name}</div>
-                  <div className="text-xs text-zinc-500 mt-0.5">
-                    {toFa(it.price)} <span>تومان</span> / واحد
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-sm font-bold text-zinc-900 line-clamp-2">{it.name}</div>
+
+                    {/* ✅ دکمه مشاهده جزئیات (QuickView) */}
+                    <button
+                      type="button"
+                      onClick={() => onRequestPreview?.(it.productId)}
+                      className="shrink-0 h-8 rounded-lg border border-zinc-200 px-2 text-[11px] font-bold text-zinc-700 hover:bg-zinc-50"
+                      title="مشاهده جزئیات"
+                    >
+                      مشاهده جزئیات
+                    </button>
                   </div>
 
-                  {/* خلاصه ویژگی‌های انتخابی (از تب پایین) */}
+                  <div className="text-xs text-zinc-500 mt-0.5">
+                    {toFa(unitPrice)} <span>تومان</span> / واحد
+                    {priceOverrides[it.productId] != null && (
+                      <span className="ms-2 text-[11px] text-pink-600">(با ویژگی‌ها)</span>
+                    )}
+                  </div>
+
+                  {/* خلاصه ویژگی‌های انتخابی */}
                   {hasAttrs && (
                     <div className="mt-1 text-[11px] leading-5 text-zinc-600">
                       <span className="font-bold text-zinc-700">ویژگی‌ها: </span>

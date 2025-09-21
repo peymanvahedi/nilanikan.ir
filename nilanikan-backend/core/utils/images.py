@@ -17,7 +17,7 @@ def _save_bytes(path, data: bytes, content_type="image/webp"):
         default_storage.delete(path)
     default_storage.save(path, ContentFile(data))
 
-def _to_webp_bytes(pil_img: Image.Image, quality=70) -> bytes:
+def _to_webp_bytes(pil_img: Image.Image, quality=85) -> bytes:
     out = BytesIO()
     pil_img.save(out, format="WEBP", quality=quality, method=6)
     return out.getvalue()

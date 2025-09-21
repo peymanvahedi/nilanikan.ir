@@ -14,6 +14,7 @@ import AttributePicker, {
 import ProductSizeNote from "@/components/ProductSizeNote";
 import ProductReviewSummary from "@/components/ProductReviewSummary";
 import CardSlider from "@/components/CardSlider";
+import Breadcrumbs from "@/components/Breadcrumbs";
 
 /* ================= Types ================= */
 type SizeChart = {
@@ -151,6 +152,27 @@ function toEmbedUrl(raw: string): string | null {
   } catch { return null; }
 }
 
+/* ====== برای بردکرامب: واکشی نام/اسلاگ دسته در صورت نبود روی محصول ====== */
+type CategoryMini = { slug?: string | null; name?: string | null; title?: string | null };
+
+async function fetchCategoryByIdOrSlug(idOrSlug: string | number): Promise<CategoryMini | null> {
+  const direct = await get<any>(`${endpoints.categories}${encodeURIComponent(String(idOrSlug))}/`, {
+    throwOnHTTP: false,
+  });
+  if (direct && !direct?.detail) {
+    return { slug: direct.slug ?? null, name: direct.name ?? direct.title ?? null };
+  }
+
+  const qs = /^\d+$/.test(String(idOrSlug)) ? `id=${idOrSlug}` : `slug=${encodeURIComponent(String(idOrSlug))}`;
+  const res = await get<any>(`${endpoints.categories}?${qs}&limit=1`, {
+    throwOnHTTP: false,
+    fallback: { results: [] },
+  });
+  const item = Array.isArray(res) ? res[0] : (Array.isArray(res?.results) ? res.results[0] : null);
+  if (!item) return null;
+  return { slug: item.slug ?? null, name: item.name ?? item.title ?? null };
+}
+
 /* ================= UI: Video Modal ================= */
 function VideoModal({
   open, onClose, video,
@@ -242,6 +264,7 @@ function DesktopGallery({
   onVideoClick: () => void; showVideoBtn: boolean;
 }) {
   const main = images[active] || images[0] || "/placeholder.svg";
+
   return (
     <div className="hidden lg:block">
       <div className="relative">
@@ -301,6 +324,10 @@ export default function ProductPage() {
 
   const [related, setRelated] = useState<any[]>([]);
   const [relLoading, setRelLoading] = useState(false);
+
+  // برای بردکرامب: وضعیت لینک و نام دسته
+  const [catCrumb, setCatCrumb] = useState<{ href?: string; label: string } | null>(null);
+
 
   useEffect(() => {
     let alive = true;
@@ -483,6 +510,45 @@ export default function ProductPage() {
     return () => { alive = false; };
   }, [product]);
 
+  // ➜ پر کردن بردکرامب دسته (اگر روی محصول ناقص باشد)
+  useEffect(() => {
+    if (!product) return;
+
+    const rawSlug =
+      product.category_slug ||
+      product.categorySlug ||
+      (typeof product.category === "string" ? product.category : null);
+    const rawName = product.category_name || product.categoryName || null;
+
+    if (rawSlug) {
+      setCatCrumb({ href: `/category/${encodeURIComponent(String(rawSlug))}`, label: rawName || "محصولات" });
+      return;
+    }
+
+    const idOrSlug = product.category ?? null;
+    if (!idOrSlug) {
+      setCatCrumb({ label: "محصولات" });
+      return;
+    }
+
+    let alive = true;
+    (async () => {
+      try {
+        const cat = await fetchCategoryByIdOrSlug(idOrSlug);
+        if (!alive) return;
+        if (cat?.slug) {
+          setCatCrumb({ href: `/category/${encodeURIComponent(cat.slug)}`, label: cat.name || "محصولات" });
+        } else {
+          setCatCrumb({ label: cat?.name || "محصولات" });
+        }
+      } catch {
+        if (alive) setCatCrumb({ label: "محصولات" });
+      }
+    })();
+
+    return () => { alive = false; };
+  }, [product]);
+
   if (loading) {
     return <main className="mx-auto max-w-7xl px-4 py-8" dir="rtl">در حال بارگذاری…</main>;
   }
@@ -526,11 +592,15 @@ export default function ProductPage() {
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-8" dir="rtl">
-      {/* breadcrumbs */}
-      <nav className="mb-4 flex flex-wrap items-center gap-2 text-sm text-zinc-500">
-        <span>محصولات</span> <span>›</span>
-        <span className="font-medium text-zinc-700">{product.name}</span>
-      </nav>
+      {/* --- Breadcrumbs لینک‌دار با دسته --- */}
+      <Breadcrumbs
+        className="mb-4"
+        items={[
+          { label: "خانه", href: "/" },
+          catCrumb || { label: "محصولات" },
+          { label: product.name },
+        ]}
+      />
 
       {/* 3 columns */}
       <div className="grid grid-cols-1 gap-8 lg:[grid-template-columns:420px_1fr_360px] lg:items-start">
@@ -570,7 +640,7 @@ export default function ProductPage() {
           <div className="sticky top-4 rounded-2xl border border-zinc-200 p-4 bg-white">
             <div className="text-center">
               {hasDiscount && (
-                <div className="mb-1 flex items-end justify-center gap-3">
+                <div className="mb-1 flex items.end justify-center gap-3">
                   <span className="rounded-lg bg-rose-600 px-2 py-0.5 text-xs font-extrabold text-white">
                     {toFa(discount)}٪
                   </span>
@@ -627,16 +697,15 @@ export default function ProductPage() {
       {/* Tabs */}
       <section className="mt-12">
         <ProductTabs
-  showFeatures={false}   // 👈 تب ویژگی‌ها حذف می‌شود
-  features={featureLines}
-  description={adjustedDescription}
-  sizeChart={adjustedSizeChart}
-  reviewsEnabled={true}
-  productId={product.id}
-  productSlug={product.slug || String(product.id)}
-  initialTab="description"
-/>
-
+          showFeatures={false}   // 👈 تب ویژگی‌ها حذف می‌شود
+          features={featureLines}
+          description={adjustedDescription}
+          sizeChart={adjustedSizeChart}
+          reviewsEnabled={true}
+          productId={product.id}
+          productSlug={product.slug || String(product.id)}
+          initialTab="description"
+        />
       </section>
 
       {/* Related products */}

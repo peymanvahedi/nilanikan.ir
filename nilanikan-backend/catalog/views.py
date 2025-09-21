@@ -4,23 +4,29 @@ from rest_framework import viewsets, permissions, filters
 from rest_framework.decorators import api_view, permission_classes, action
 from rest_framework.response import Response
 
-from .models import Category, Product, Bundle, ProductVideo, BundleVideo  # ← ویدیوها
+from .models import (
+    Category,
+    Product,
+    Bundle,
+    ProductVideo,
+    BundleVideo,
+    MenuItem,  # ← اضافه شد
+)
 from .serializers import (
     CategorySerializer,
-    CategoryDetailSerializer,   # ← اضافه شد (برای صفحه جزئیات دسته)
+    CategoryDetailSerializer,
     ProductSerializer,
     BundleSerializer,
     ProductItemSerializer,
-    ProductVideoSerializer,   # ← اضافه شد
-    BundleVideoSerializer,    # ← اضافه شد
-    MenuCategorySerializer,   # ← سریالایزر منو
+    ProductVideoSerializer,
+    BundleVideoSerializer,
+    MenuCategorySerializer,
+    MenuItemSerializer,   # ← اضافه شد
 )
 
-# اسلایدها و بنرها
 from banners.models import Slide, Banner
 from banners.serializers import SlideSerializer, BannerSerializer
 
-# استوری‌ها
 from stories.models import Story
 from stories.serializers import StorySerializer
 
@@ -56,7 +62,6 @@ def home_view(request):
     banners_qs = Banner.objects.filter(is_active=True).order_by("order", "-id")
     banners = BannerSerializer(banners_qs, many=True, context={"request": request}).data
 
-    # حذف بنرهای تکراری نسبت به اسلایدها
     slide_imgs = {s.get("imageUrl", "") for s in hero_slides if s.get("imageUrl")}
     banners = [b for b in banners if b.get("imageUrl") and b["imageUrl"] not in slide_imgs]
 
@@ -99,7 +104,6 @@ def home_view(request):
     })
 
 
-# --- ReadOnly API viewsets for router /api/... ---
 class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Category.objects.all().order_by("menu_order", "name")
     serializer_class = CategorySerializer
@@ -109,9 +113,7 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
     search_fields = ["name", "slug"]
     ordering_fields = ["menu_order", "name", "id"]
 
-    # ✨ فقط افزوده شده؛ هیچ‌چیز از کد قبلی حذف نشده
     def get_serializer_class(self):
-        # برای صفحه جزئیات دسته، آیکن و بنر (image) هم برگردانده شود
         if self.action == "retrieve":
             return CategoryDetailSerializer
         return super().get_serializer_class()
@@ -159,7 +161,6 @@ class BundleViewSet(viewsets.ReadOnlyModelViewSet):
     ordering_fields = ["id", "bundle_price"]
 
 
-# --- اختیاری: CRUD API برای ویدیوها (فقط ادمین) ---
 class ProductVideoViewSet(viewsets.ModelViewSet):
     serializer_class = ProductVideoSerializer
     permission_classes = [permissions.IsAdminUser]
@@ -182,3 +183,16 @@ class BundleVideoViewSet(viewsets.ModelViewSet):
         if bundle_id:
             qs = qs.filter(bundle_id=bundle_id)
         return qs
+
+
+# ---------------- MenuItem View (ادمین منو) ----------------
+@api_view(["GET"])
+@permission_classes([permissions.AllowAny])
+def menu_view(request):
+    """
+    منوی اصلی قابل مدیریت از ادمین
+    GET /api/v1/menu/
+    """
+    roots = MenuItem.objects.filter(is_active=True, parent__isnull=True).order_by("sort_order", "id")
+    data = MenuItemSerializer(roots, many=True, context={"request": request}).data
+    return Response(data)

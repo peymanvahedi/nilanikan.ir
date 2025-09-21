@@ -1,11 +1,12 @@
-// src/app/category/[slug]/page.tsx
+import Link from "next/link";
 import ProductCard from "@/components/ProductCard";
 import { get, endpoints, buildQuery } from "@/lib/api";
 import type { Metadata, ResolvingMetadata } from "next";
+import Breadcrumbs from "@/components/Breadcrumbs"; // 👈 اضافه شد
 
 type ProductListItem = {
   id: number | string;
-  slug?: string; // ممکنه API خالی بدهد → پایین فالبک گذاشتیم
+  slug?: string;
   name: string;
   price: number;
   discount_price?: number | null;
@@ -24,7 +25,6 @@ type CategoryInfo = {
   name?: string;
   title?: string;
   description?: string | null;
-  // ↓↓↓ افزوده شد: برای نمایش آیکن و بنر دسته
   icon?: string | null;
   image?: string | null;
 };
@@ -38,19 +38,18 @@ function listify(x: ProductsResponse): ProductListItem[] {
 function getCount(x: ProductsResponse): number | undefined {
   return Array.isArray(x) ? x.length : (x as any).count;
 }
+function humanizeSlug(s: string): string {
+  try { return decodeURIComponent(s).replace(/-/g, " ").trim(); }
+  catch { return s.replace(/-/g, " ").trim(); }
+}
 
 async function fetchCategory(slug: string): Promise<CategoryInfo | null> {
   try {
-    // تلاش اول با /categories/<slug>/
-    const info = await get<CategoryInfo>(`${endpoints.categories}${encodeURIComponent(slug)}/`, {
-      throwOnHTTP: true,
-    });
+    const info = await get<CategoryInfo>(`${endpoints.categories}${encodeURIComponent(slug)}/`, { throwOnHTTP: true });
     return info || null;
   } catch {
-    // فالبک با ?slug=
     const res = await get<any>(`${endpoints.categories}?slug=${encodeURIComponent(slug)}&limit=1`, {
-      throwOnHTTP: false,
-      fallback: { results: [] },
+      throwOnHTTP: false, fallback: { results: [] },
     });
     const item = Array.isArray(res) ? res[0] : (Array.isArray(res?.results) ? res.results[0] : null);
     return (item as CategoryInfo) || null;
@@ -70,11 +69,11 @@ export async function generateMetadata(
   const page = Number(searchParams.page ?? "1") || 1;
   const cat = await fetchCategory(params.slug);
 
-  const titleBase = cat?.title || cat?.name || params.slug;
-  const title = `${titleBase}${page > 1 ? ` - صفحه ${page}` : ""} | نیلانیکان`;
+  const base = cat?.title || cat?.name || humanizeSlug(params.slug);
+  const title = `${base}${page > 1 ? ` - صفحه ${page}` : ""} | نیلانیکان`;
   const description =
     (cat?.description && String(cat.description)) ||
-    `محصولات دسته «${titleBase}» در فروشگاه نیلانیکان${page > 1 ? ` - صفحه ${page}` : ""}.`;
+    `محصولات دسته «${base}» در فروشگاه نیلانیکان${page > 1 ? ` - صفحه ${page}` : ""}.`;
 
   return {
     title,
@@ -91,25 +90,36 @@ export default async function CategoryPage({ params, searchParams }: PageProps) 
   const page = Number(searchParams.page ?? "1") || 1;
   const limit = Number(searchParams.limit ?? "24") || 24;
 
-  // 👇 اگر API تو پارامتر دیگه می‌خواست (مثلاً category_slug)، اینجا تغییر بده
   const query = buildQuery({ page, limit, category: slug });
 
   const [catInfo, data] = await Promise.all([
     fetchCategory(slug).catch(() => null),
     get<ProductsResponse>(`${endpoints.products}${query}`, {
-      throwOnHTTP: false,
-      fallback: { results: [] },
+      throwOnHTTP: false, fallback: { results: [] },
     }),
   ]);
 
   const items = listify(data);
   const total = getCount(data);
+  const catTitle = catInfo?.title || catInfo?.name || humanizeSlug(slug);
 
   return (
     <main className="container mx-auto px-4 py-6" dir="rtl">
+      {/* --- بردکرامب لینک‌دار --- */}
+      <Breadcrumbs
+        className="mb-2"
+        items={[
+          { label: "خانه", href: "/" },
+          // اگر صفحه‌ی «همه دسته‌ها» داری، این لینک را فعال کن:
+          // { label: "محصولات", href: "/category" },
+          { label: "محصولات" }, // بدون لینک
+          { label: catTitle },
+        ]}
+      />
+
+      {/* --- هدر دسته --- */}
       <header className="mb-6 space-y-2">
         <div className="flex items-center gap-2">
-          {/* آیکن کوچک کنار عنوان (اختیاری) */}
           {catInfo?.icon ? (
             <img
               src={catInfo.icon}
@@ -118,16 +128,13 @@ export default async function CategoryPage({ params, searchParams }: PageProps) 
               loading="lazy"
             />
           ) : null}
-          <h1 className="text-xl md:text-2xl font-bold">
-            {catInfo?.title || catInfo?.name || slug}
-          </h1>
+          <h1 className="text-xl md:text-2xl font-bold">{catTitle}</h1>
         </div>
 
         {catInfo?.description ? (
           <p className="text-sm text-zinc-600">{catInfo.description}</p>
         ) : null}
 
-        {/* بنر/هدر دسته (جدید) */}
         {catInfo?.image ? (
           <div className="mt-3 overflow-hidden rounded-2xl">
             <img
@@ -140,6 +147,7 @@ export default async function CategoryPage({ params, searchParams }: PageProps) 
         ) : null}
       </header>
 
+      {/* --- لیست محصولات --- */}
       {items.length === 0 ? (
         <p className="text-sm text-zinc-500">فعلاً محصولی برای این دسته یافت نشد.</p>
       ) : (
@@ -148,7 +156,7 @@ export default async function CategoryPage({ params, searchParams }: PageProps) 
             <ProductCard
               key={p.slug ?? p.id}
               id={p.id}
-              slug={p.slug ?? String(p.id)} // ✅ فالبک درست
+              slug={p.slug ?? String(p.id)}
               name={p.name}
               price={Number(p.price)}
               discount_price={typeof p.discount_price === "number" ? p.discount_price : undefined}
@@ -160,7 +168,7 @@ export default async function CategoryPage({ params, searchParams }: PageProps) 
         </div>
       )}
 
-      {/* Pagination */}
+      {/* --- صفحه‌بندی --- */}
       <nav className="mt-8 flex items-center justify-center gap-2 text-sm">
         {page > 1 && (
           <a
