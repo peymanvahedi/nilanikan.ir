@@ -445,7 +445,6 @@ function SizeGuideModal({
   );
 }
 
-/* ==================== Quick View (با گالری و نمایش موجودی واریانت) ==================== */
 function ProductQuickView({
   open,
   loading,
@@ -467,13 +466,6 @@ function ProductQuickView({
 
   const [picked, setPicked] = useState<SelectedAttrs>({});
   const [sizeOpen, setSizeOpen] = useState(false);
-
-  const hasSizeAttribute =
-    Array.isArray(product?.attributes) &&
-    (product!.attributes as AV[]).some(a =>
-      String(a.attribute || "").toLowerCase().includes("size") ||
-      /سایز|اندازه/i.test(String(a.attribute || ""))
-    );
 
   const sizeGuideHtml =
     (product as any)?.size_guide_html ?? (product as any)?.meta?.size_guide_html ?? null;
@@ -500,7 +492,8 @@ function ProductQuickView({
     const chosenKey = keys.find((k) => pref.includes(k.toLowerCase())) ?? keys[0];
     const chosen = chosenKey ? picked[chosenKey] : null;
     if (!chosen) return null;
-    return product.variants.find((v) => v.size?.id === chosen.id) || null;
+    // مقایسه بر اساس value بجای id
+    return product.variants.find((v) => v.size?.value === chosen.value) || null;
   }, [product?.variants, picked]);
 
   const unitPrice = useMemo(() => {
@@ -509,14 +502,12 @@ function ProductQuickView({
     return toNum(p);
   }, [selectedVariant, product?.discount_price, product?.price]);
 
-  /* ---------- موجودی/انبار واریانت ---------- */
   function getVariantStock(v: any): number | null {
     if (!v) return null;
-    // تلاش برای پیدا کردن عدد موجودی در کلیدهای رایج
     const keys = [
-      "stock", "quantity", "qty", "inventory",
-      "available_qty", "availableQuantity",
-      "count_in_stock", "countInStock"
+      "stock","quantity","qty","inventory",
+      "available_qty","availableQuantity",
+      "count_in_stock","countInStock"
     ];
     for (const k of keys) {
       if (v[k] != null) {
@@ -524,13 +515,11 @@ function ProductQuickView({
         if (Number.isFinite(n)) return n;
       }
     }
-    // فقط وضعیت بولی بدون عدد
     if (v.in_stock === false || v.available === false) return 0;
     return null;
   }
   const variantStock = useMemo(() => getVariantStock(selectedVariant), [selectedVariant]);
 
-  /* ---------- گالری تصاویر محصول (محصول + واریانت) ---------- */
   function normalizeList(x: any): string[] {
     if (!x) return [];
     if (typeof x === "string") {
@@ -545,16 +534,12 @@ function ProductQuickView({
   }
   function pickUrl(o: any): string | null {
     if (!o) return null;
-    return (
-      o.image || o.url || o.src || o.thumbnail || o.original ||
-      (typeof o === "string" ? o : null)
-    );
+    return o.image || o.url || o.src || o.thumbnail || o.original ||
+           (typeof o === "string" ? o : null);
   }
 
   const gallery = useMemo(() => {
     const urls: string[] = [];
-
-    // محصول
     const imgs = normalizeList((product as any)?.images).map(pickUrl).filter(Boolean) as string[];
     const metaGallery = normalizeList((product as any)?.meta?.gallery).map(pickUrl).filter(Boolean) as string[];
     const photos = normalizeList((product as any)?.photos).map(pickUrl).filter(Boolean) as string[];
@@ -563,16 +548,12 @@ function ProductQuickView({
       ? ((product as any).gallery as any[]).map(pickUrl).filter(Boolean) as string[]
       : [];
     const primary = pickUrl((product as any)?.image) || pickUrl((product as any)?.thumbnail);
-
     urls.push(...(primary ? [primary] : []), ...imgs, ...metaGallery, ...photos, ...media, ...galleryObjs);
-
-    // واریانت انتخاب‌شده
     if (selectedVariant) {
       const vPrimary = pickUrl((selectedVariant as any)?.image) || pickUrl((selectedVariant as any)?.thumbnail);
       const vImgs = normalizeList((selectedVariant as any)?.images).map(pickUrl).filter(Boolean) as string[];
       urls.unshift(...(vPrimary ? [vPrimary] : []), ...vImgs);
     }
-
     const abs = urls.map(u => absolutizeMedia(u) || u).filter(Boolean) as string[];
     return Array.from(new Set(abs));
   }, [product, selectedVariant]);
@@ -592,7 +573,6 @@ function ProductQuickView({
     >
       <div className="min-h-full grid place-items-center p-4" onClick={(e) => e.stopPropagation()}>
         <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white ring-1 ring-zinc-200 shadow-xl">
-          {/* Header */}
           <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 border-b border-zinc-100 bg-white/95 backdrop-blur">
             <h3 className="text-base md:text-lg font-extrabold text-zinc-900">
               {product?.title || product?.name || "محصول"}
@@ -606,7 +586,6 @@ function ProductQuickView({
             <div className="p-6 text-center text-sm text-zinc-500">در حال بارگذاری اطلاعات…</div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_320px] gap-5 p-4">
-              {/* چپ: توضیحات و ویژگی‌ها */}
               <div className="min-w-0">
                 <div
                   className="prose prose-sm max-w-none mb-3 break-words [&_*]:!max-w-full text-zinc-700 leading-relaxed"
@@ -617,7 +596,7 @@ function ProductQuickView({
                   <div className="mt-2">
                     <div className="flex items-center justify-between mb-1">
                       <div className="text-xs font-bold text-zinc-700">انتخاب ویژگی‌ها</div>
-                      {hasSizeAttribute && (sizeGuideHtml || sizeGuideUrl || sizeChartImg) && (
+                      {hasSizeGuide && (
                         <button
                           type="button"
                           onClick={() => setSizeOpen(true)}
@@ -630,14 +609,12 @@ function ProductQuickView({
 
                     <AttributePicker attributes={product!.attributes as AV[]} selected={picked} onChange={setPicked} />
 
-                    {/* پیام انتخاب ویژگی / نمایش موجودی */}
                     {!allAttrsChosen && (
                       <div className="mt-2 text-xs text-amber-600">
                         لطفاً ویژگی‌های موردنیاز (سایز/رنگ) را انتخاب کنید.
                       </div>
                     )}
 
-                    {/* موجودی واریانت انتخاب‌شده */}
                     {selectedVariant ? (
                       <div className="mt-2 text-xs">
                         {variantStock != null ? (
@@ -709,7 +686,6 @@ function ProductQuickView({
                 </div>
               </div>
 
-              {/* راست: گالری تصاویر */}
               <div className="order-first md:order-last">
                 <div className="relative aspect-[4/5] w-full rounded-xl overflow-hidden ring-1 ring-zinc-200">
                   <Image
@@ -744,7 +720,6 @@ function ProductQuickView({
             </div>
           )}
 
-          {/* Size Guide Modal */}
           <SizeGuideModal
             open={sizeOpen}
             onClose={() => setSizeOpen(false)}

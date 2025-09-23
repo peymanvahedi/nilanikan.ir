@@ -167,27 +167,88 @@ class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
         return Response(data)
 
 
+# --- Product ---
 class ProductViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    پشتیبانی از:
+    - GET /api/products/<slug>/          ← واکشی تکی با اسلاگ (و فالبک به id و الگوی slug-123)
+    - GET /api/products/?slug=...        ← فیلتر دقیق با اسلاگ
+    - GET /api/products/?id=...|&sku=... ← فیلتر دقیق با id یا SKU
+    - GET /api/products/?search=...      ← جست‌وجو روی name/slug/description
+    """
     serializer_class = ProductSerializer
     permission_classes = [permissions.AllowAny]
     lookup_field = "slug"
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ["name", "slug", "description"]
-    ordering_fields = ["id", "price"]
+    search_fields = ["name", "slug", "sku", "description"]
+    ordering_fields = ["id", "price", "created_at"]
 
     def get_queryset(self):
         return (
-            Product.objects.all()
+            Product.objects.all()  # اگر فقط Activeها را می‌خواهی: .filter(is_active=True)
             .select_related("category")
             .prefetch_related(
-                "gallery", "videos",           # مدیا
-                "variants",                    # خود واریانت‌ها
+                "gallery", "videos",
+                "variants",
                 "variants__color", "variants__color__attribute",
                 "variants__size",  "variants__size__attribute",
             )
             .order_by("-id")
         )
 
+    def list(self, request, *args, **kwargs):
+        qs = self.get_queryset()
+        slug   = request.query_params.get("slug")
+        pid    = request.query_params.get("id") or request.query_params.get("pk")
+        sku    = request.query_params.get("sku")
+        search = request.query_params.get("search")
+
+        if slug:
+            qs = qs.filter(slug=slug)
+        if pid:
+            qs = qs.filter(pk=pid)
+        if sku:
+            qs = qs.filter(sku=sku)
+        if search:
+            qs = qs.filter(
+                Q(name__icontains=search) | Q(slug__icontains=search) | Q(description__icontains=search)
+            )
+
+        page = self.paginate_queryset(qs)
+        if page is not None:
+            ser = self.get_serializer(page, many=True, context={"request": request})
+            return self.get_paginated_response(ser.data)
+        ser = self.get_serializer(qs, many=True, context={"request": request})
+        return Response(ser.data)
+
+    def retrieve(self, request, *args, **kwargs):
+        value = kwargs.get(self.lookup_field)
+        qs = self.get_queryset()
+
+        # 1) دقیق با اسلاگ
+        obj = qs.filter(slug=value).first()
+
+        # 2) اگر مقدار عددی بود → id
+        if not obj and value and str(value).isdigit():
+            obj = qs.filter(pk=value).first()
+
+        # 3) اگر الگوی slug-123 بود → base-slug یا id
+        if not obj and value:
+            import re
+            m = re.match(r"^(.*?)-(\d+)$", str(value))
+            if m:
+                base, num = m.group(1), m.group(2)
+                obj = qs.filter(slug=base).first() or qs.filter(pk=num).first()
+
+        # 4) آخرین تلاش: تطبیق دقیق روی name/slug/sku (بدون حروف بزرگ/کوچک)
+        if not obj and value:
+            obj = qs.filter(Q(slug__iexact=value) | Q(name__iexact=value) | Q(sku__iexact=value)).first()
+
+        if not obj:
+            raise Http404("Product not found")
+
+        ser = self.get_serializer(obj, context={"request": request})
+        return Response(ser.data)
 
 
 class BundleViewSet(viewsets.ReadOnlyModelViewSet):
@@ -204,7 +265,6 @@ class BundleViewSet(viewsets.ReadOnlyModelViewSet):
     lookup_field = "slug"
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ["title", "slug"]
-    # اجازه‌ی مرتب‌سازی روی فیلدهای مشخص + created_at
     ordering_fields = ["id", "bundle_price", "created_at"]
 
     def get_queryset(self):
@@ -219,7 +279,6 @@ class BundleViewSet(viewsets.ReadOnlyModelViewSet):
             .order_by("-id")
         )
 
-    # فهرست با فیلترهای ساده + صفحه‌بندی استاندارد DRF
     def list(self, request, *args, **kwargs):
         qs = self.get_queryset()
         slug = request.query_params.get("slug")
@@ -233,12 +292,10 @@ class BundleViewSet(viewsets.ReadOnlyModelViewSet):
         if search:
             qs = qs.filter(Q(title__icontains=search) | Q(slug__icontains=search))
 
-        # پشتیبانی از alias فرانت: ordering=-created | created → created_at
         ordering = request.query_params.get("ordering")
         if ordering in ("-created", "created"):
             qs = qs.order_by(("-" if ordering.startswith("-") else "") + "created_at")
 
-        # صفحه‌بندی استاندارد DRF → خروجی شامل {count,next,previous,results}
         page = self.paginate_queryset(qs)
         if page is not None:
             ser = self.get_serializer(page, many=True, context={"request": request})
@@ -247,18 +304,15 @@ class BundleViewSet(viewsets.ReadOnlyModelViewSet):
         ser = self.get_serializer(qs, many=True, context={"request": request})
         return Response(ser.data)
 
-    # واکشی تکی با منطق fallback
     def retrieve(self, request, *args, **kwargs):
         value = kwargs.get(self.lookup_field)
         qs = self.get_queryset()
 
-        # 1) دقیق با اسلاگ
         obj = qs.filter(slug=value).first()
         if obj:
             ser = self.get_serializer(obj, context={"request": request})
             return Response(ser.data)
 
-        # 2) اگر الگوی slug-1234 بود، base و id را تست کن
         import re
         m = re.match(r"^(.*?)-(\d+)$", value or "")
         if m:
@@ -268,7 +322,6 @@ class BundleViewSet(viewsets.ReadOnlyModelViewSet):
                 ser = self.get_serializer(obj, context={"request": request})
                 return Response(ser.data)
 
-        # 3) آخرین تلاش: جست‌وجو
         obj = qs.filter(Q(slug__iexact=value) | Q(title__iexact=value)).first()
         if obj:
             ser = self.get_serializer(obj, context={"request": request})

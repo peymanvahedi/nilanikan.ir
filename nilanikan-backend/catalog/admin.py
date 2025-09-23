@@ -185,7 +185,8 @@ class ProductAdmin(admin.ModelAdmin):
             "fields": ("price", "discount_price")
         }),
         ("راهنمای سایز", {
-            "fields": ("size_guide_title", "size_guide_url")
+            # ➜ این بخش کامل شد تا HTML و تصویر هم داشته باشد
+            "fields": ("size_guide_title", "size_guide_html", "size_guide_url", "size_chart_image")
         }),
         ("ویژگی‌ها و جدول سایز", {
             "fields": ("attributes", "size_chart")

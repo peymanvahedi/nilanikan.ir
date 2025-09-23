@@ -41,6 +41,9 @@ class Category(models.Model):
 # =========================
 # Product
 # =========================
+# =========================
+# Product
+# =========================
 class Product(models.Model):
     name = models.CharField(max_length=200)
     slug = models.SlugField(unique=True)
@@ -52,7 +55,7 @@ class Product(models.Model):
     # قیمت محصول می‌تواند خالی باشد؛ قیمت روی واریانت‌ها
     price = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
     discount_price = models.DecimalField(
-        max_digits=10, decimal_places=2, blank=True, null=True
+      max_digits=10, decimal_places=2, blank=True, null=True
     )
 
     description = models.TextField(blank=True)
@@ -66,8 +69,9 @@ class Product(models.Model):
     # راهنمای سایز اختصاصی محصول (برای دکمه «راهنمای سایز»)
     size_guide_title = models.CharField(max_length=120, blank=True, null=True)
     size_guide_url   = models.URLField(blank=True, null=True)
-    size_guide_html  = models.TextField(blank=True, null=True, db_column='product_size_guide_html')
+    size_guide_html  = models.TextField(blank=True, null=True, db_column="product_size_guide_html")
     size_chart_image = models.ImageField(upload_to="products/size_charts/", blank=True, null=True)
+
     attributes = models.ManyToManyField(
         "AttributeValue", blank=True, related_name="products"
     )

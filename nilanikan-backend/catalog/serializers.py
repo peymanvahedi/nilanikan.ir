@@ -188,30 +188,28 @@ class ProductSerializer(serializers.ModelSerializer):
     attributes = serializers.SerializerMethodField()
     variants = ProductVariantSerializer(many=True, read_only=True)
     stock = serializers.SerializerMethodField()
-    size_guide = serializers.SerializerMethodField()  # ← جدید
+
+    # --- فیلدهای راهنمای سایز (flat) ---
+    size_chart_image = serializers.SerializerMethodField()
+    size_guide_url   = serializers.SerializerMethodField()
+    size_guide_html  = serializers.CharField(allow_blank=True, allow_null=True, required=False)
+    size_guide_title = serializers.CharField(allow_blank=True, allow_null=True, required=False)
+    # --- fallback/meta برای فرانت ---
+    meta = serializers.SerializerMethodField()
+    # ------------------------------------
 
     class Meta:
         model = Product
         fields = [
-            "id",
-            "name",
-            "slug",
-            "sku",
-            "category",
-            "price",
-            "discount_price",
-            "description",
-            "image",
-            "gallery",
-            "videos",
-            "stock",
-            "is_active",
-            "is_recommended",
-            "created_at",
-            "attributes",
-            "size_chart",
-            "variants",
-            "size_guide",  # ← جدید
+            "id", "name", "slug", "sku", "category",
+            "price", "discount_price", "description",
+            "image", "gallery", "videos",
+            "stock", "is_active", "is_recommended", "created_at",
+            "attributes", "size_chart", "variants",
+            # فیلدهای راهنمای سایز
+            "size_guide_title", "size_guide_html", "size_guide_url", "size_chart_image",
+            # fallback/meta
+            "meta",
         ]
 
     def get_image(self, obj):
@@ -226,10 +224,8 @@ class ProductSerializer(serializers.ModelSerializer):
         variants = getattr(obj, "variants", None)
         if not variants:
             return []
-
         qs = variants.all() if hasattr(variants, "all") else variants
-        groups = {}
-        seen = set()
+        groups, seen = {}, set()
 
         def push(av: AttributeValue):
             if not av:
@@ -239,10 +235,7 @@ class ProductSerializer(serializers.ModelSerializer):
             if key in seen:
                 return
             seen.add(key)
-
-            if attr_name not in groups:
-                groups[attr_name] = {"attribute": attr_name, "values": []}
-
+            groups.setdefault(attr_name, {"attribute": attr_name, "values": []})
             groups[attr_name]["values"].append({
                 "id": av.id,
                 "label": av.value,
@@ -253,19 +246,46 @@ class ProductSerializer(serializers.ModelSerializer):
         for v in qs:
             push(getattr(v, "color", None))
             push(getattr(v, "size", None))
-
         return list(groups.values())
 
-    def get_size_guide(self, obj):
+    # -------- helpers for size guide --------
+    def get_size_chart_image(self, obj):
         req = self.context.get("request")
-        title = getattr(obj, "size_guide_title", None) or \
-                getattr(getattr(obj, "category", None), "default_size_guide_title", None) or \
-                "راهنمای سایز"
+        return abs_url(req, safe_file_url(getattr(obj, "size_chart_image", None))) or None
+
+    def get_size_guide_url(self, obj):
+        req = self.context.get("request")
         url = getattr(obj, "size_guide_url", None) or \
               getattr(getattr(obj, "category", None), "default_size_guide_url", None)
-        if not url:
+        return abs_url(req, url) if url else None
+
+    def get_meta(self, obj):
+        """
+        اگر محصول خودش راهنمای سایز ندارد، از دسته‌بندی fallback بدهیم.
+        فرانت شما در ProductQuickView به product.meta.* هم نگاه می‌کند.
+        """
+        # اگر خود محصول مقدار دارد، meta می‌تواند خالی باشد (فرانت اولویت را به فیلدهای flat می‌دهد)
+        if obj.size_guide_html or obj.size_guide_url or obj.size_chart_image:
+            return {
+                "size_guide_html": obj.size_guide_html,
+                "size_guide_url": self.get_size_guide_url(obj),
+                "size_chart_image": self.get_size_chart_image(obj),
+                "size_guide_title": obj.size_guide_title,
+            }
+
+        cat: Category = getattr(obj, "category", None)
+        if not cat:
             return None
-        return {"title": title, "url": abs_url(req, url) or url}
+
+        # Fallback از Category
+        data = {}
+        if getattr(cat, "default_size_guide_url", None):
+            data["size_guide_url"] = cat.default_size_guide_url
+        if getattr(cat, "default_size_guide_title", None):
+            data["size_guide_title"] = cat.default_size_guide_title
+
+        # در حال حاضر Category فیلد html/image ندارد؛ اگر بعداً اضافه شد، اینجا مشابه بالا اضافه کنید.
+        return data or None
 
 
 class ProductItemSerializer(serializers.ModelSerializer):
