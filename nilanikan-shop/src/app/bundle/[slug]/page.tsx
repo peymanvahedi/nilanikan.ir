@@ -8,7 +8,6 @@ import { get, endpoints, absolutizeMedia } from "../../../lib/api";
 import BundleItemPicker from "../../../components/BundleItemPicker";
 import Link from "next/link";
 
-// 👇 همان کامپوننت صفحه تکی
 import AttributePicker, {
   SelectedAttrs,
   AttributeValue as AV,
@@ -40,6 +39,11 @@ type Product = {
   description?: string | null;
   attributes?: AV[] | Record<string, any> | null;
   variants?: Variant[] | null;
+
+  meta?: Record<string, any> | null;
+  size_guide_html?: string | null;
+  size_guide_url?: string | null;
+  size_chart_image?: string | null;
 };
 
 type VideoItem = {
@@ -120,7 +124,7 @@ function toEmbedUrl(raw: string): string | null {
     }
     if (host.includes("aparat.com")) {
       const parts = u.pathname.split("/").filter(Boolean);
-      const vIdx = parts.findIndex((p) => p === "v" || p === "video");
+      const vIdx = parts.findIndex((p) => p === "v" || p === "video"); // ✅ بجای «یا»
       const code = vIdx >= 0 ? parts[vIdx + 1] : parts[0];
       if (code) return `https://www.aparat.com/video/video/embed/videohash/${code}/vt/frame`;
       return raw;
@@ -167,6 +171,37 @@ function normalizeBundleItems(bundle: Bundle): BundleItem[] {
   return [];
 }
 
+function hasSelectableOptions(p: any): boolean {
+  if (!p) return false;
+
+  if (Array.isArray(p?.attributes)) {
+    const arr = p.attributes as any[];
+    if (arr.length > 0) return true;
+  }
+
+  const buckets = [
+    p?.attribute_values, p?.options, p?.specs, p?.properties,
+    p?.attribute_groups, p?.configurable_options, p?.configurableAttributes,
+    p?.variation_attributes, p?.attributeOptions, p?.meta?.attributes, p?.meta?.options
+  ].filter(Boolean);
+
+  for (const g of buckets as any[]) {
+    const list = Array.isArray(g) ? g : [];
+    for (const it of list) {
+      let vals: any =
+        it?.values ?? it?.options ?? it?.items ?? it?.choices ?? it?.allowed_values ??
+        it?.value ?? it?.value_name ?? null;
+      if (typeof vals === "string") {
+        const parts = vals.split(/[,،|/]/).map(s => s.trim()).filter(Boolean);
+        if (parts.length > 1) return true;
+      } else if (Array.isArray(vals) && vals.filter(Boolean).length > 1) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 async function fetchProductAny(key: string) {
   const direct = await get<any>(`${endpoints.products}${encodeURIComponent(key)}/`, { throwOnHTTP: false });
   if (direct && !direct?.detail) return direct;
@@ -197,79 +232,31 @@ async function fetchProductAny(key: string) {
   return found ?? null;
 }
 
-/* ---------- Bundle fetcher: محکم و چندمسیره ---------- */
 async function fetchBundleAny(slug: string): Promise<Bundle | null> {
-  // 1) مسیر detail (…/bundles/{slug}/) — اگر API اجازه بدهد
-  const direct = await get<any>(`${endpoints.bundles}${encodeURIComponent(slug)}/`, { throwOnHTTP: false });
+  const m = slug.match(/^(.*?)-(\d+)$/);
+  const baseSlug = m ? m[1] : slug;
+
+  let direct = await get<any>(`${endpoints.bundles}${encodeURIComponent(slug)}/`, {
+    throwOnHTTP: false,
+  });
   if (direct && !direct?.detail) return direct as Bundle;
 
-  // 2) جست‌وجو دقیق با slug
-  let resp = await get<any>(`${endpoints.bundles}?slug=${encodeURIComponent(slug)}`, {
-    throwOnHTTP: false, fallback: { results: [] },
-  });
-  let arr = listify<Bundle>(resp);
-  let found = arr.find((b) => b?.slug === slug);
-  if (found) return found;
-
-  // 3) بعضی API‌ها «code» دارند
-  resp = await get<any>(`${endpoints.bundles}?code=${encodeURIComponent(slug)}`, {
-    throwOnHTTP: false, fallback: { results: [] },
-  });
-  arr = listify<Bundle>(resp);
-  found = arr.find((b: any) => b?.code === slug || b?.slug === slug);
-  if (found) return found;
-
-  // 4) اگر slug عددی بود، بر اساس id هم تست کنیم
-  if (/^\d+$/.test(slug)) {
-    resp = await get<any>(`${endpoints.bundles}?id=${encodeURIComponent(slug)}`, {
-      throwOnHTTP: false, fallback: { results: [] },
+  if (baseSlug !== slug) {
+    direct = await get<any>(`${endpoints.bundles}${encodeURIComponent(baseSlug)}/`, {
+      throwOnHTTP: false,
     });
-    arr = listify<Bundle>(resp);
-    found = arr.find((b: any) => String(b?.id) === slug);
-    if (found) return found;
+    if (direct && !direct?.detail) return direct as Bundle;
   }
 
-  // 5) جست‌وجوی آزاد
-  resp = await get<any>(`${endpoints.bundles}?search=${encodeURIComponent(slug)}`, {
-    throwOnHTTP: false, fallback: { results: [] },
-  });
-  arr = listify<Bundle>(resp);
-  found =
-  arr.find((b) => b?.slug === slug) ??
-  arr.find((b: any) => String(b?.id) === slug);
-
+  const resp = await get<any>(
+    `${endpoints.bundles}?search=${encodeURIComponent(baseSlug)}`,
+    { throwOnHTTP: false, fallback: { results: [] } }
+  );
+  const arr = Array.isArray(resp?.results) ? resp.results : Array.isArray(resp) ? resp : [];
+  const found =
+    arr.find((b: any) => b?.slug === baseSlug) ??
+    arr.find((b: any) => b?.slug === slug);
   return found ?? null;
-}
-
-function hasSelectableOptions(p: any): boolean {
-  if (!p) return false;
-
-  if (Array.isArray(p?.attributes)) {
-    const arr = p.attributes as any[];
-    if (arr.length > 0) return true;
-  }
-
-  const buckets = [
-    p?.attribute_values, p?.options, p?.specs, p?.properties,
-    p?.attribute_groups, p?.configurable_options, p?.configurableAttributes,
-    p?.variation_attributes, p?.attributeOptions, p?.meta?.attributes, p?.meta?.options
-  ].filter(Boolean);
-
-  for (const g of buckets as any[]) {
-    const list = Array.isArray(g) ? g : [];
-    for (const it of list) {
-      let vals: any =
-        it?.values ?? it?.options ?? it?.items ?? it?.choices ?? it?.allowed_values ??
-        it?.value ?? it?.value_name ?? null;
-      if (typeof vals === "string") {
-        const parts = vals.split(/[,،|/]/).map(s => s.trim()).filter(Boolean);
-        if (parts.length > 1) return true;
-      } else if (Array.isArray(vals) && vals.filter(Boolean).length > 1) {
-        return true;
-      }
-    }
-  }
-  return false;
 }
 
 /* ==================== UI Pieces ==================== */
@@ -363,21 +350,112 @@ function DesktopGallery({
   );
 }
 
-/* ==================== Quick View ==================== */
+/* ==================== Size Guide Modal (inline) ==================== */
+function SizeGuideModal({
+  open,
+  onClose,
+  title,
+  html,
+  imageUrl,
+  linkUrl,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title?: string | null;
+  html?: string | null;
+  imageUrl?: string | null;
+  linkUrl?: string | null;
+}) {
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[130] bg-black/60 backdrop-blur-sm"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      dir="rtl"
+    >
+      <div
+        className="absolute inset-0 grid place-items-center p-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white ring-1 ring-zinc-200 shadow-xl">
+          <div className="sticky top-0 flex items-center justify-between px-4 py-3 border-b bg-white">
+            <h3 className="text-base md:text-lg font-extrabold text-zinc-900">
+              {title || "راهنمای سایز"}
+            </h3>
+            <button
+              onClick={onClose}
+              className="h-9 w-9 grid place-items-center rounded-full bg-zinc-100 text-zinc-700"
+              aria-label="بستن"
+              type="button"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24">
+                <path
+                  fill="currentColor"
+                  d="M18.3 5.71 12 12l-6.29-6.29-1.42 1.42L10.59 13.4l-6.3 6.29 1.42 1.42L12 14.83l6.29 6.28 1.42-1.41-6.3-6.3 6.3-6.29z"
+                />
+              </svg>
+            </button>
+          </div>
+
+          <div className="p-4">
+            {html ? (
+              <div
+                className="prose prose-sm max-w-none"
+                dangerouslySetInnerHTML={{ __html: html }}
+              />
+            ) : null}
+
+            {imageUrl ? (
+              <div className="mt-3 rounded-xl overflow-hidden ring-1 ring-zinc-200">
+                <img src={imageUrl} alt="راهنمای سایز" className="w-full h-auto" />
+              </div>
+            ) : null}
+
+            {linkUrl && !html && !imageUrl ? (
+              <a
+                href={linkUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 mt-3 text-pink-700 hover:underline"
+              >
+                مشاهده راهنمای سایز
+                <svg width="16" height="16" viewBox="0 0 24 24">
+                  <path
+                    fill="currentColor"
+                    d="M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42L17.59 5H14V3Z"
+                  />
+                  <path
+                    fill="currentColor"
+                    d="M5 5h5V3H3v7h2V5Z"
+                  />
+                </svg>
+              </a>
+            ) : null}
+
+            {!html && !imageUrl && !linkUrl ? (
+              <div className="text-sm text-zinc-500">راهنمای سایزی ثبت نشده است.</div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ==================== Quick View (با گالری و نمایش موجودی واریانت) ==================== */
 function ProductQuickView({
   open,
   loading,
   product,
-  qty,
-  onQtyChange,
   onClose,
   onConfirm,
 }: {
   open: boolean;
   loading: boolean;
   product: Product | null;
-  qty: number;
-  onQtyChange: (n: number) => void;
   onClose: () => void;
   onConfirm: (id: number, qty: number, attrs?: AttrPair[], unitPrice?: number) => void;
 }) {
@@ -388,6 +466,25 @@ function ProductQuickView({
   }, [onClose]);
 
   const [picked, setPicked] = useState<SelectedAttrs>({});
+  const [sizeOpen, setSizeOpen] = useState(false);
+
+  const hasSizeAttribute =
+    Array.isArray(product?.attributes) &&
+    (product!.attributes as AV[]).some(a =>
+      String(a.attribute || "").toLowerCase().includes("size") ||
+      /سایز|اندازه/i.test(String(a.attribute || ""))
+    );
+
+  const sizeGuideHtml =
+    (product as any)?.size_guide_html ?? (product as any)?.meta?.size_guide_html ?? null;
+  const sizeGuideUrlRaw =
+    (product as any)?.size_guide_url ?? (product as any)?.meta?.size_guide_url ?? null;
+  const sizeChartImgRaw =
+    (product as any)?.size_chart_image ?? (product as any)?.meta?.size_chart_image ?? null;
+
+  const sizeGuideUrl = sizeGuideUrlRaw ? (absolutizeMedia(sizeGuideUrlRaw) || sizeGuideUrlRaw) : null;
+  const sizeChartImg = sizeChartImgRaw ? (absolutizeMedia(sizeChartImgRaw) || sizeChartImgRaw) : null;
+  const hasSizeGuide = !!(sizeGuideHtml || sizeGuideUrl || sizeChartImg);
 
   const allAttrsChosen = useMemo(() => {
     const a = product?.attributes;
@@ -412,10 +509,77 @@ function ProductQuickView({
     return toNum(p);
   }, [selectedVariant, product?.discount_price, product?.price]);
 
-  const imgs = (Array.isArray(product?.images) ? product!.images! : []).filter(Boolean);
-  const mainImg =
-    absolutizeMedia((product as any)?.image || (product as any)?.thumbnail || imgs[0] || undefined) ||
-    "/placeholder.svg";
+  /* ---------- موجودی/انبار واریانت ---------- */
+  function getVariantStock(v: any): number | null {
+    if (!v) return null;
+    // تلاش برای پیدا کردن عدد موجودی در کلیدهای رایج
+    const keys = [
+      "stock", "quantity", "qty", "inventory",
+      "available_qty", "availableQuantity",
+      "count_in_stock", "countInStock"
+    ];
+    for (const k of keys) {
+      if (v[k] != null) {
+        const n = toNum(v[k]);
+        if (Number.isFinite(n)) return n;
+      }
+    }
+    // فقط وضعیت بولی بدون عدد
+    if (v.in_stock === false || v.available === false) return 0;
+    return null;
+  }
+  const variantStock = useMemo(() => getVariantStock(selectedVariant), [selectedVariant]);
+
+  /* ---------- گالری تصاویر محصول (محصول + واریانت) ---------- */
+  function normalizeList(x: any): string[] {
+    if (!x) return [];
+    if (typeof x === "string") {
+      try {
+        const arr = JSON.parse(x);
+        if (Array.isArray(arr)) return arr.map(String);
+      } catch {}
+      return x.split(/[,|،]\s*/).map(s => s.trim()).filter(Boolean);
+    }
+    if (Array.isArray(x)) return x.slice();
+    return [];
+  }
+  function pickUrl(o: any): string | null {
+    if (!o) return null;
+    return (
+      o.image || o.url || o.src || o.thumbnail || o.original ||
+      (typeof o === "string" ? o : null)
+    );
+  }
+
+  const gallery = useMemo(() => {
+    const urls: string[] = [];
+
+    // محصول
+    const imgs = normalizeList((product as any)?.images).map(pickUrl).filter(Boolean) as string[];
+    const metaGallery = normalizeList((product as any)?.meta?.gallery).map(pickUrl).filter(Boolean) as string[];
+    const photos = normalizeList((product as any)?.photos).map(pickUrl).filter(Boolean) as string[];
+    const media = normalizeList((product as any)?.media).map(pickUrl).filter(Boolean) as string[];
+    const galleryObjs = Array.isArray((product as any)?.gallery)
+      ? ((product as any).gallery as any[]).map(pickUrl).filter(Boolean) as string[]
+      : [];
+    const primary = pickUrl((product as any)?.image) || pickUrl((product as any)?.thumbnail);
+
+    urls.push(...(primary ? [primary] : []), ...imgs, ...metaGallery, ...photos, ...media, ...galleryObjs);
+
+    // واریانت انتخاب‌شده
+    if (selectedVariant) {
+      const vPrimary = pickUrl((selectedVariant as any)?.image) || pickUrl((selectedVariant as any)?.thumbnail);
+      const vImgs = normalizeList((selectedVariant as any)?.images).map(pickUrl).filter(Boolean) as string[];
+      urls.unshift(...(vPrimary ? [vPrimary] : []), ...vImgs);
+    }
+
+    const abs = urls.map(u => absolutizeMedia(u) || u).filter(Boolean) as string[];
+    return Array.from(new Set(abs));
+  }, [product, selectedVariant]);
+
+  const [activeIdx, setActiveIdx] = useState(0);
+  useEffect(() => setActiveIdx(0), [product?.id, selectedVariant?.id, gallery.length]);
+  const mainImg = gallery[activeIdx] || "/placeholder.svg";
 
   if (!open) return null;
 
@@ -441,7 +605,8 @@ function ProductQuickView({
           {loading ? (
             <div className="p-6 text-center text-sm text-zinc-500">در حال بارگذاری اطلاعات…</div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_300px] gap-5 p-4">
+            <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_320px] gap-5 p-4">
+              {/* چپ: توضیحات و ویژگی‌ها */}
               <div className="min-w-0">
                 <div
                   className="prose prose-sm max-w-none mb-3 break-words [&_*]:!max-w-full text-zinc-700 leading-relaxed"
@@ -450,12 +615,53 @@ function ProductQuickView({
 
                 {Array.isArray(product?.attributes) && product!.attributes!.length > 0 && (
                   <div className="mt-2">
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="text-xs font-bold text-zinc-700">انتخاب ویژگی‌ها</div>
+                      {hasSizeAttribute && (sizeGuideHtml || sizeGuideUrl || sizeChartImg) && (
+                        <button
+                          type="button"
+                          onClick={() => setSizeOpen(true)}
+                          className="text-xs font-bold text-pink-700 hover:text-pink-800"
+                        >
+                          راهنمای سایز
+                        </button>
+                      )}
+                    </div>
+
                     <AttributePicker attributes={product!.attributes as AV[]} selected={picked} onChange={setPicked} />
+
+                    {/* پیام انتخاب ویژگی / نمایش موجودی */}
                     {!allAttrsChosen && (
                       <div className="mt-2 text-xs text-amber-600">
                         لطفاً ویژگی‌های موردنیاز (سایز/رنگ) را انتخاب کنید.
                       </div>
                     )}
+
+                    {/* موجودی واریانت انتخاب‌شده */}
+                    {selectedVariant ? (
+                      <div className="mt-2 text-xs">
+                        {variantStock != null ? (
+                          variantStock > 0 ? (
+                            <span className="inline-flex items-center rounded-lg bg-emerald-50 px-2 py-1 font-bold text-emerald-700">
+                              موجودی: {variantStock.toLocaleString("fa-IR")} عدد
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center rounded-lg bg-red-50 px-2 py-1 font-bold text-red-700">
+                              ناموجود
+                            </span>
+                          )
+                        ) : (
+                          <span className="text-zinc-500">موجودی این ویژگی مشخص نیست</span>
+                        )}
+                      </div>
+                    ) : (
+                      Array.isArray(product?.variants) && product!.variants!.length > 0 && (
+                        <div className="mt-2 text-xs text-zinc-500">
+                          برای مشاهده موجودی، ابتدا ویژگی را انتخاب کنید.
+                        </div>
+                      )
+                    )}
+
                     {selectedVariant && (selectedVariant.stock ?? 0) <= 0 && (
                       <div className="mt-2 text-xs text-red-600">ناموجود برای این انتخاب</div>
                     )}
@@ -463,12 +669,6 @@ function ProductQuickView({
                 )}
 
                 <div className="mt-5 flex items-center gap-3">
-                  <label className="text-xs text-zinc-600">تعداد</label>
-                  <input
-                    type="number" min={1} value={qty}
-                    onChange={(e) => onQtyChange(Math.max(1, Number(e.target.value) || 1))}
-                    className="h-9 w-20 rounded-lg border border-zinc-300 px-2 text-sm text-zinc-800"
-                  />
                   <div className="ms-auto text-sm font-extrabold text-zinc-900">
                     {unitPrice.toLocaleString("fa-IR")} <span className="text-xs">تومان</span>
                   </div>
@@ -487,7 +687,7 @@ function ProductQuickView({
                       }));
                       const detail: any = {
                         productId: Number(product.id),
-                        quantity: qty,
+                        quantity: 1,
                         attributes: attrs,
                         unitPrice,
                       };
@@ -509,18 +709,56 @@ function ProductQuickView({
                 </div>
               </div>
 
+              {/* راست: گالری تصاویر */}
               <div className="order-first md:order-last">
                 <div className="relative aspect-[4/5] w-full rounded-xl overflow-hidden ring-1 ring-zinc-200">
-                  <Image src={mainImg} alt={product?.title || product?.name || "محصول"} fill className="object-cover" sizes="(min-width:768px) 300px, 100vw" />
+                  <Image
+                    src={mainImg}
+                    alt={String(product?.title || product?.name || "محصول")}
+                    fill
+                    className="object-cover"
+                    sizes="(min-width:768px) 320px, 100vw"
+                    priority
+                  />
                 </div>
+
+                {gallery.length > 1 && (
+                  <div className="mt-3 flex items-center gap-2 overflow-x-auto [&::-webkit-scrollbar]:hidden">
+                    {gallery.map((src, i) => (
+                      <button
+                        key={src + i}
+                        onClick={() => setActiveIdx(i)}
+                        className={`relative h-16 w-16 flex-shrink-0 rounded-lg overflow-hidden ring-1 ${
+                          activeIdx === i ? "ring-2 ring-pink-600" : "ring-zinc-200"
+                        }`}
+                        aria-label={`تصویر ${i + 1}`}
+                        title={`تصویر ${i + 1}`}
+                        type="button"
+                      >
+                        <Image src={src} alt={`thumb-${i + 1}`} fill className="object-cover" sizes="64px" />
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}
+
+          {/* Size Guide Modal */}
+          <SizeGuideModal
+            open={sizeOpen}
+            onClose={() => setSizeOpen(false)}
+            title={(product?.title || product?.name) ? `راهنمای سایز ${product?.title || product?.name}` : "راهنمای سایز"}
+            html={sizeGuideHtml}
+            imageUrl={sizeChartImg}
+            linkUrl={sizeGuideUrl}
+          />
         </div>
       </div>
     </div>
   );
 }
+
 
 /* ==================== Page ==================== */
 export default function BundleDetailPage() {
@@ -541,17 +779,14 @@ export default function BundleDetailPage() {
   const [videoOpen, setVideoOpen] = useState(false);
   const [videoIndex, setVideoIndex] = useState(0);
 
-  // Quick View state
   const [quickOpen, setQuickOpen] = useState(false);
   const [quickLoading, setQuickLoading] = useState(false);
   const [quickProduct, setQuickProduct] = useState<Product | null>(null);
   const [quickQty, setQuickQty] = useState(1);
 
-  // دریافت باندل
   useEffect(() => {
     let alive = true;
     (async () => {
-      // اگر هنوز slug نرسیده، صبرِ یک رندر
       if (!slug) { setLoading(true); return; }
 
       setLoading(true); setErr(null);
@@ -560,7 +795,6 @@ export default function BundleDetailPage() {
         if (!alive) return;
         if (data) {
           setBundle(data);
-          // اگر API اسلاگِ نُرمال برگرداند، URL را اصلاح کنیم
           if (data.slug && slug !== data.slug) router.replace(`/bundle/${encodeURIComponent(data.slug)}`);
         } else {
           setErr("not_found");
@@ -575,7 +809,6 @@ export default function BundleDetailPage() {
     return () => { alive = false; };
   }, [slug, router]);
 
-  // اگر bundle.products گزینهٔ انتخابی نداشت، محصول کامل را fetch کن
   useEffect(() => {
     (async () => {
       if (!bundle) return;
@@ -606,7 +839,6 @@ export default function BundleDetailPage() {
 
   const name = bundle?.title || bundle?.name || "ست محصولات";
 
-  // گالری تصاویر
   const images = useMemo(() => {
     if (!bundle) return [] as string[];
     const galleryRaw: string[] = [
@@ -617,7 +849,6 @@ export default function BundleDetailPage() {
     return galleryRaw.map((g, i) => resolveImage(g, (bundle?.slug || "bundle") + "_" + i));
   }, [bundle]);
 
-  // ویدیوها
   const videos = useMemo<VideoItem[]>(() => {
     if (!bundle?.videos || !Array.isArray(bundle.videos)) return [];
     return bundle.videos
@@ -632,14 +863,12 @@ export default function BundleDetailPage() {
 
   const showVideoBtn = videos.length > 0;
 
-  // آیتم‌ها برای پیکر
   const normalizedItems = useMemo<BundleItem[]>(
     () => (bundle ? normalizeBundleItems(bundle) : []),
     [bundle]
   );
   const hasItems = normalizedItems.length > 0;
 
-  // Quick View helpers
   const openQuickView = useCallback(async (productId: number) => {
     setQuickLoading(true);
     setQuickQty(1);
@@ -662,7 +891,6 @@ export default function BundleDetailPage() {
   if (loading)
     return <main className="mx-auto max-w-7xl px-4 py-8" dir="rtl">در حال بارگذاری…</main>;
 
-  // 🔻 حالت خالیِ تمیز، به‌جای «خطا: باندل پیدا نشد»
   if (err === "not_found" || !bundle) {
     return (
       <main className="mx-auto max-w-3xl px-4 py-16" dir="rtl">
@@ -763,15 +991,12 @@ export default function BundleDetailPage() {
         </aside>
       </div>
 
-      {/* Video modal */}
       <VideoModal open={videoOpen} onClose={() => setVideoOpen(false)} video={videos[videoIndex] ?? null} />
 
       <ProductQuickView
         open={quickOpen}
         loading={quickLoading}
         product={quickProduct}
-        qty={quickQty}
-        onQtyChange={setQuickQty}
         onClose={closeQuickView}
         onConfirm={() => {}}
       />

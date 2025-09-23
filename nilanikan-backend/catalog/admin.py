@@ -34,18 +34,14 @@ class CategoryAdmin(admin.ModelAdmin):
     prepopulated_fields = {"slug": ("name",)}
 
     fieldsets = (
-        ("اطلاعات اصلی", {
-            "fields": ("name", "slug", "description", "parent")
-        }),
+        ("اطلاعات اصلی", {"fields": ("name", "slug", "description", "parent")}),
         ("تنظیمات منو", {
-            "fields": (
-                "show_in_menu", "is_active", "menu_order",
-                "icon", "image", "image_thumb_readonly",
-            )
+            "fields": ("show_in_menu", "is_active", "menu_order", "icon", "image", "image_thumb_readonly")
         }),
-        ("متادیتا", {
-            "fields": ("created_at",),
+        ("راهنمای سایز پیش‌فرض", {
+            "fields": ("default_size_guide_title", "default_size_guide_url")
         }),
+        ("متادیتا", {"fields": ("created_at",)}),
     )
     readonly_fields = ("created_at", "image_thumb_readonly")
 
@@ -111,17 +107,28 @@ class ProductVideoInline(admin.TabularInline):
 
 
 # =========================
-# Product Variants Inline
+# Product Variants Inline (سطرِ ترکیب رنگ+سایز)
 # =========================
 class ProductVariantInline(admin.TabularInline):
     model = ProductVariant
-    extra = 1
-    autocomplete_fields = ("size",)
+    extra = 0
+    fields = ("color", "size", "price", "stock")
+    autocomplete_fields = ("color", "size")
+
+    def formfield_for_foreignkey(self, db_field, request, **kwargs):
+        if db_field.name == "color":
+            kwargs["queryset"] = AttributeValue.objects.filter(
+                attribute__type=Attribute.COLOR
+            )
+        elif db_field.name == "size":
+            kwargs["queryset"] = AttributeValue.objects.filter(
+                attribute__name__in=["سایز", "Size", "size", "اندازه"]
+            )
+        return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
 
 # -------------------------
 # فرم ادمینِ Product
-# هدف: نمایش بدون ".00" در ورودی‌ها
 # -------------------------
 class ProductForm(forms.ModelForm):
     class Meta:
@@ -129,35 +136,25 @@ class ProductForm(forms.ModelForm):
         fields = "__all__"
 
     def __init__(self, *args, **kwargs):
-        """
-        مقدار اولیه‌ی price/discount_price را نرمال می‌کنیم تا
-        صفرهای اعشاری انتهایی حذف شوند؛ مثلاً 5000.00 → 5000
-        اما اگر اعشاری واقعی وجود داشته باشد نگه می‌داریم؛ 5000.75 → 5000.75
-        """
         super().__init__(*args, **kwargs)
 
         def normalize_decimal(value):
             try:
-                # Decimal.normalize() صفرهای اضافی را حذف می‌کند
                 v = value.normalize()
-                # نمایش علمی را به نمایش معمولی برگردانیم (مثلاً 1E+4 → 10000)
-                return format(v, 'f')
+                return format(v, "f")
             except Exception:
                 return value
 
         if self.instance and getattr(self.instance, "pk", None):
             if "price" in self.fields and getattr(self.instance, "price", None) is not None:
                 self.initial["price"] = normalize_decimal(self.instance.price)
-
             if "discount_price" in self.fields and getattr(self.instance, "discount_price", None) is not None:
                 self.initial["discount_price"] = normalize_decimal(self.instance.discount_price)
 
-        # ورودی عددی را دوستانه‌تر کنیم
         for fname in ("price", "discount_price"):
             if fname in self.fields:
                 self.fields[fname].localize = True
                 self.fields[fname].widget.is_localized = True
-                # اجازه‌ی اعشار (در صورت نیاز)؛ اگر اعشار نمی‌خواهید step=1 بگذارید
                 self.fields[fname].widget.attrs.update({
                     "inputmode": "decimal",
                     "step": "0.01",
@@ -180,10 +177,27 @@ class ProductAdmin(admin.ModelAdmin):
     inlines = [ProductImageInline, ProductVideoInline, ProductVariantInline]
     filter_horizontal = ("attributes",)
 
-    # نمایش قیمت با جداکننده هزار و حذف اعشار صفر
+    fieldsets = (
+        ("اطلاعات اصلی", {
+            "fields": ("name", "slug", "sku", "category", "description", "image")
+        }),
+        ("قیمت", {
+            "fields": ("price", "discount_price")
+        }),
+        ("راهنمای سایز", {
+            "fields": ("size_guide_title", "size_guide_url")
+        }),
+        ("ویژگی‌ها و جدول سایز", {
+            "fields": ("attributes", "size_chart")
+        }),
+        ("وضعیت و موجودی", {
+            "fields": ("stock", "is_active", "is_recommended")
+        }),
+    )
+
     def price_display(self, obj):
-        # اگر قیمت 5000.00 باشد → "5,000"
-        # اگر 5000.75 باشد → "5,000.75"
+        if getattr(obj, "price", None) is None:
+            return "—"
         return number_format(obj.price, decimal_pos=None, use_l10n=True)
     price_display.short_description = "قیمت"
 
@@ -258,12 +272,25 @@ class BannerAdmin(admin.ModelAdmin):
 
 
 # =========================
-# Attribute & AttributeValue
+# Attribute & AttributeValue (مثل وردپرس)
 # =========================
+class AttributeValueInline(admin.TabularInline):
+    model = AttributeValue
+    extra = 3
+    prepopulated_fields = {"slug": ("value",)}
+
+    def get_fields(self, request, obj=None):
+        base = ["value", "slug"]
+        if obj and obj.type == Attribute.COLOR:
+            base.append("color_code")
+        return base
+
+
 @admin.register(Attribute)
 class AttributeAdmin(admin.ModelAdmin):
     list_display = ("name", "slug", "type")
     prepopulated_fields = {"slug": ("name",)}
+    inlines = [AttributeValueInline]
 
 
 @admin.register(AttributeValue)

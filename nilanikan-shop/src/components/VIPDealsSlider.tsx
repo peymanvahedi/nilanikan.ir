@@ -41,12 +41,14 @@ const pickImg = (p: any): string | undefined =>
   (Array.isArray(p?.gallery) && p.gallery.map((g: any) => g?.image).find((x: any) => !!x)) ||
   undefined;
 
-const hrefOf = (p: any): string => {
-  if (p?.link) return p.link;
-  if (p?.slug && p?.kind === "bundle") return `/bundle/${p.slug}`;
+ const hrefOf = (p: any): string => {
+  const isBundle = p?.kind === "bundle" || p?.is_bundle === true;
+  if (p?.slug && isBundle) return `/bundle/${p.slug}`;
   if (p?.slug) return `/product/${p.slug}`;
+  if (typeof p?.link === "string") return p.link;
   return "#";
 };
+
 
 export default function VIPDealsSlider({
   products = [],
@@ -116,7 +118,6 @@ export default function VIPDealsSlider({
               >
                 <Link href={href} className="block">
                   <div className="relative w-full aspect-[3/4] rounded-xl overflow-hidden">
-                    {/* فقط اگر تصویر داریم، نشان بده؛ در خطای لود، تصویر را مخفی کن */}
                     {img && (
                       <img
                         src={img}

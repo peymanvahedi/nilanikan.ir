@@ -6,6 +6,7 @@ import { absolutizeMedia } from "@/lib/api";
 
 type MaybeStr = string | null | undefined | false;
 type BaseMedia = MaybeStr | { image?: MaybeStr; [k: string]: any };
+type SizeGuide = { title?: string | null; url?: string | null } | null;
 
 export type ProductLike = {
   id?: number | string;
@@ -22,6 +23,7 @@ export type ProductLike = {
   ribbon?: string;
   ribbonTone?: "pink" | "emerald" | "zinc";
   tag?: string;
+  size_guide?: SizeGuide; // ← جدید
 };
 
 export type ProductCardFlatProps = {
@@ -40,6 +42,7 @@ export type ProductCardFlatProps = {
   ribbon?: string;
   ribbonTone?: "pink" | "emerald" | "zinc";
   tag?: string;
+  size_guide?: SizeGuide; // ← جدید
 };
 
 export type ProductCardItemProps = {
@@ -61,14 +64,15 @@ function resolveImage(
   images?: (MaybeStr)[] | null,
   gallery?: (BaseMedia)[] | null
 ) {
-  const firstGallery = Array.isArray(gallery) && gallery[0] && (gallery[0] as any).image;
+  const firstGallery =
+    Array.isArray(gallery) && gallery[0] && (gallery[0] as any).image;
   const candidate =
     normalizeStr(imageUrl) ??
     normalizeStr(Array.isArray(images) ? images[0] : undefined) ??
     normalizeStr(firstGallery as MaybeStr) ??
     normalizeStr(image);
   const absolute = absolutizeMedia(candidate);
-  return absolute; // ⛔️ بدون هیچ fallback
+  return absolute;
 }
 
 function toFa(n: number) {
@@ -113,6 +117,7 @@ export default function ProductCard(props: ProductCardProps) {
           ribbon: props.item.ribbon,
           ribbonTone: props.item.ribbonTone,
           tag: props.item.tag,
+          size_guide: props.item.size_guide ?? null, // ← جدید
         }
       : props;
 
@@ -132,6 +137,7 @@ export default function ProductCard(props: ProductCardProps) {
     ribbon,
     ribbonTone,
     tag,
+    size_guide,
   } = flat;
 
   const fallbackHref =
@@ -146,16 +152,32 @@ export default function ProductCard(props: ProductCardProps) {
   const hasOff = p != null && dp != null && dp < p;
   const off = hasOff ? Math.round((1 - (dp as number) / (p as number)) * 100) : 0;
 
-  const src = resolveImage(imageUrl, image, images ?? undefined, gallery ?? undefined);
+  const src = resolveImage(
+    imageUrl,
+    image,
+    images ?? undefined,
+    gallery ?? undefined
+  );
+
+  const sgUrl =
+    typeof size_guide?.url === "string" && size_guide.url.trim()
+      ? size_guide.url
+      : undefined;
+  const sgTitle = (size_guide?.title || "راهنمای سایز") as string;
+
+  function onSizeGuideClick(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (sgUrl) window.open(sgUrl, "_blank", "noopener,noreferrer");
+  }
 
   return (
     <Link
-  href={fallbackHref}
-  className={`relative block rounded-2xl border border-zinc-200 bg-white p-3 hover:shadow-sm transition ${className}`}
-  aria-label={name}
-  data-testid="product-card"
->
-
+      href={fallbackHref}
+      className={`relative block rounded-2xl border border-zinc-200 bg-white p-3 hover:shadow-sm transition ${className}`}
+      aria-label={name}
+      data-testid="product-card"
+    >
       <div className="relative aspect-[4/5] w-full overflow-hidden rounded-xl ring-1 ring-zinc-100">
         {tag && (
           <span className="absolute left-2 top-2 z-10 rounded-md bg-white/90 px-2 py-0.5 text-[10px] font-bold text-pink-600 ring-1 ring-pink-100">
@@ -173,7 +195,19 @@ export default function ProductCard(props: ProductCardProps) {
           </span>
         )}
 
-        {/* ⛔️ فقط اگر تصویر واقعی داریم */}
+        {/* دکمه راهنمای سایز */}
+        {sgUrl && (
+          <button
+            type="button"
+            onClick={onSizeGuideClick}
+            className="absolute left-2 bottom-2 z-10 rounded-md bg-white/90 px-2 py-0.5 text-[10px] font-bold text-zinc-700 ring-1 ring-zinc-200 hover:bg-white"
+            aria-label={sgTitle}
+            title={sgTitle}
+          >
+            {sgTitle}
+          </button>
+        )}
+
         {src && (
           <Image
             src={src}
@@ -187,7 +221,9 @@ export default function ProductCard(props: ProductCardProps) {
       </div>
 
       <div className="mt-3 space-y-1">
-        <h3 className="line-clamp-2 text-sm font-semibold text-zinc-900">{name}</h3>
+        <h3 className="line-clamp-2 text-sm font-semibold text-zinc-900">
+          {name}
+        </h3>
         {brand && <div className="text-[11px] text-zinc-500">{brand}</div>}
 
         {(p != null || dp != null) && (

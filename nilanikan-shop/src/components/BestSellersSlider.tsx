@@ -29,11 +29,13 @@ const pickImg = (p: any): string | undefined =>
   undefined;
 
 const hrefOf = (p: any): string => {
-  if (p?.link) return p.link;
-  if (p?.slug && p?.kind === "bundle") return `/bundle/${p.slug}`;
+  const isBundle = p?.kind === "bundle" || p?.is_bundle === true;
+  if (p?.slug && isBundle) return `/bundle/${p.slug}`;
   if (p?.slug) return `/product/${p.slug}`;
+  if (typeof p?.link === "string") return p.link;
   return "#";
 };
+;
 
 // قیمت نهایی و قیمت اصلی را از فیلدهای رایج می‌خوانیم، واحد را هوشمند تشخیص می‌دهیم
 function resolvePrices(p: any) {
@@ -160,7 +162,6 @@ export default function BestSellersSlider({
               >
                 <Link href={href} className="block">
                   <div className="relative w-full aspect-[4/5] rounded-[16px] overflow-hidden">
-                    {/* فقط وقتی تصویر داریم نمایش بده؛ در خطا، تصویر مخفی شود */}
                     {img && (
                       <img
                         src={img}

@@ -1,6 +1,8 @@
 import os
 from typing import Optional, Tuple
+
 from rest_framework import serializers
+
 from .models import (
     Category,
     Product,
@@ -11,9 +13,10 @@ from .models import (
     BundleVideo,
     AttributeValue,
     ProductVariant,
-    MenuItem,     # ← اضافه شد
+    MenuItem,
 )
 from stories.models import Story
+
 
 # ------------------------- Helpers -------------------------
 def abs_url(request, url: Optional[str]) -> Optional[str]:
@@ -28,15 +31,10 @@ def abs_url(request, url: Optional[str]) -> Optional[str]:
         return request.build_absolute_uri(url)
     return url
 
+
 def product_link(obj: Product) -> str:
     return f"/product/{obj.slug}/" if getattr(obj, "slug", None) else f"/product/{obj.pk}/"
 
-def product_prices(obj: Product) -> Tuple[Optional[float], Optional[float]]:
-    price = getattr(obj, "price", None)
-    discount = getattr(obj, "discount_price", None)
-    if discount and float(discount) > 0:
-        return float(discount), float(price) if price is not None else None
-    return float(price) if price is not None else None, None
 
 def safe_file_url(f) -> str:
     try:
@@ -46,11 +44,58 @@ def safe_file_url(f) -> str:
         pass
     return ""
 
+
+def variant_min_price(obj: Product) -> Optional[float]:
+    try:
+        variants = getattr(obj, "variants", None)
+        if not variants:
+            return None
+        qs = variants.all() if hasattr(variants, "all") else variants
+
+        with_stock = [float(v.price) for v in qs if (getattr(v, "stock", 0) or 0) > 0 and v.price is not None]
+        if with_stock:
+            return min(with_stock)
+
+        all_prices = [float(v.price) for v in qs if v.price is not None]
+        return min(all_prices) if all_prices else None
+    except Exception:
+        return None
+
+
+def variant_total_stock(obj: Product) -> Optional[int]:
+    try:
+        variants = getattr(obj, "variants", None)
+        if not variants:
+            return None
+        qs = variants.all() if hasattr(variants, "all") else variants
+        counted = [int(getattr(v, "stock", 0) or 0) for v in qs]
+        return sum(counted) if counted else 0
+    except Exception:
+        return None
+
+
+def product_prices(obj: Product) -> Tuple[Optional[float], Optional[float]]:
+    price = getattr(obj, "price", None)
+    discount = getattr(obj, "discount_price", None)
+
+    if price is not None and float(price) > 0:
+        if discount and float(discount) > 0 and float(discount) < float(price):
+            return float(discount), float(price)
+        return float(price), None
+
+    vmin = variant_min_price(obj)
+    if vmin is not None:
+        return float(vmin), None
+
+    return None, None
+
+
 # ------------------------- Category -------------------------
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
         fields = ["id", "name", "slug", "description", "parent"]
+
 
 class CategoryDetailSerializer(serializers.ModelSerializer):
     icon = serializers.SerializerMethodField()
@@ -68,6 +113,7 @@ class CategoryDetailSerializer(serializers.ModelSerializer):
         req = self.context.get("request")
         return abs_url(req, safe_file_url(getattr(obj, "image", None))) or ""
 
+
 class MenuCategorySerializer(serializers.ModelSerializer):
     children = serializers.SerializerMethodField()
 
@@ -79,6 +125,7 @@ class MenuCategorySerializer(serializers.ModelSerializer):
         qs = obj.children.filter(is_active=True, show_in_menu=True).order_by("menu_order", "name")
         return MenuCategorySerializer(qs, many=True, context=self.context).data
 
+
 # ------------------------- Attribute Values -------------------------
 class AttributeValueSerializer(serializers.ModelSerializer):
     attribute = serializers.CharField(source="attribute.name")
@@ -86,6 +133,7 @@ class AttributeValueSerializer(serializers.ModelSerializer):
     class Meta:
         model = AttributeValue
         fields = ["id", "attribute", "value", "slug", "color_code"]
+
 
 # ------------------------- Product Images -------------------------
 class ProductImageSerializer(serializers.ModelSerializer):
@@ -98,6 +146,7 @@ class ProductImageSerializer(serializers.ModelSerializer):
     def get_image(self, obj):
         req = self.context.get("request")
         return abs_url(req, safe_file_url(getattr(obj, "image", None)))
+
 
 # ------------------------- Product Videos -------------------------
 class ProductVideoSerializer(serializers.ModelSerializer):
@@ -118,13 +167,16 @@ class ProductVideoSerializer(serializers.ModelSerializer):
         req = self.context.get("request")
         return abs_url(req, safe_file_url(getattr(obj, "thumbnail", None))) or ""
 
+
 # ------------------------- Product Variants -------------------------
 class ProductVariantSerializer(serializers.ModelSerializer):
+    color = AttributeValueSerializer()
     size = AttributeValueSerializer()
 
     class Meta:
         model = ProductVariant
-        fields = ["id", "size", "price", "stock"]
+        fields = ["id", "color", "size", "price", "stock"]
+
 
 # ------------------------- Product -------------------------
 class ProductSerializer(serializers.ModelSerializer):
@@ -132,22 +184,89 @@ class ProductSerializer(serializers.ModelSerializer):
     gallery = ProductImageSerializer(many=True, read_only=True)
     videos = ProductVideoSerializer(many=True, read_only=True)
     is_recommended = serializers.BooleanField(read_only=False)
-    attributes = AttributeValueSerializer(many=True, read_only=True)
+
+    attributes = serializers.SerializerMethodField()
     variants = ProductVariantSerializer(many=True, read_only=True)
+    stock = serializers.SerializerMethodField()
+    size_guide = serializers.SerializerMethodField()  # ← جدید
 
     class Meta:
         model = Product
         fields = [
-            "id","name","slug","sku","category",
-            "price","discount_price","description",
-            "image","gallery","videos",
-            "stock","is_active","is_recommended","created_at",
-            "attributes","size_chart","variants",
+            "id",
+            "name",
+            "slug",
+            "sku",
+            "category",
+            "price",
+            "discount_price",
+            "description",
+            "image",
+            "gallery",
+            "videos",
+            "stock",
+            "is_active",
+            "is_recommended",
+            "created_at",
+            "attributes",
+            "size_chart",
+            "variants",
+            "size_guide",  # ← جدید
         ]
 
     def get_image(self, obj):
         req = self.context.get("request")
         return abs_url(req, safe_file_url(getattr(obj, "image", None)))
+
+    def get_stock(self, obj):
+        total = variant_total_stock(obj)
+        return getattr(obj, "stock", None) if total is None else total
+
+    def get_attributes(self, obj):
+        variants = getattr(obj, "variants", None)
+        if not variants:
+            return []
+
+        qs = variants.all() if hasattr(variants, "all") else variants
+        groups = {}
+        seen = set()
+
+        def push(av: AttributeValue):
+            if not av:
+                return
+            attr_name = getattr(av.attribute, "name", "") or "ویژگی"
+            key = (attr_name, av.id)
+            if key in seen:
+                return
+            seen.add(key)
+
+            if attr_name not in groups:
+                groups[attr_name] = {"attribute": attr_name, "values": []}
+
+            groups[attr_name]["values"].append({
+                "id": av.id,
+                "label": av.value,
+                "value": av.slug or av.value,
+                "color": av.color_code,
+            })
+
+        for v in qs:
+            push(getattr(v, "color", None))
+            push(getattr(v, "size", None))
+
+        return list(groups.values())
+
+    def get_size_guide(self, obj):
+        req = self.context.get("request")
+        title = getattr(obj, "size_guide_title", None) or \
+                getattr(getattr(obj, "category", None), "default_size_guide_title", None) or \
+                "راهنمای سایز"
+        url = getattr(obj, "size_guide_url", None) or \
+              getattr(getattr(obj, "category", None), "default_size_guide_url", None)
+        if not url:
+            return None
+        return {"title": title, "url": abs_url(req, url) or url}
+
 
 class ProductItemSerializer(serializers.ModelSerializer):
     title = serializers.SerializerMethodField()
@@ -162,8 +281,15 @@ class ProductItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product
         fields = [
-            "id","title","imageUrl","image",
-            "price","compareAtPrice","link","badge","is_recommended",
+            "id",
+            "title",
+            "imageUrl",
+            "image",
+            "price",
+            "compareAtPrice",
+            "link",
+            "badge",
+            "is_recommended",
         ]
 
     def get_title(self, obj):
@@ -173,16 +299,19 @@ class ProductItemSerializer(serializers.ModelSerializer):
         req = self.context.get("request")
         return abs_url(req, safe_file_url(getattr(obj, "image", None))) or ""
 
-    def get_imageUrl(self, obj): return self._img(obj)
-    def get_image(self, obj): return self._img(obj)
+    def get_imageUrl(self, obj):
+        return self._img(obj)
+
+    def get_image(self, obj):
+        return self._img(obj)
 
     def get_price(self, obj):
-        price, _ = product_prices(obj)
-        return price or 0
+        p, _ = product_prices(obj)
+        return p or 0
 
     def get_compareAtPrice(self, obj):
-        _, compare = product_prices(obj)
-        return compare
+        _, cmp_ = product_prices(obj)
+        return cmp_
 
     def get_link(self, obj):
         return product_link(obj)
@@ -190,31 +319,35 @@ class ProductItemSerializer(serializers.ModelSerializer):
     def get_badge(self, obj):
         price = getattr(obj, "price", None)
         discount = getattr(obj, "discount_price", None)
-        if price and discount and float(price) > 0 and float(discount) < float(price):
-            try:
+        try:
+            if price and float(price) > 0 and discount and float(discount) > 0 and float(discount) < float(price):
                 off = int(round((1 - float(discount) / float(price)) * 100))
                 return f"{off}% OFF"
-            except Exception:
-                return "OFF"
+        except Exception:
+            return "OFF"
         return None
+
 
 # ------------------------- Bundle -------------------------
 class BundleImageSerializer(serializers.ModelSerializer):
     image = serializers.SerializerMethodField()
+
     class Meta:
         model = BundleImage
-        fields = ["id","image","alt","order","is_primary"]
+        fields = ["id", "image", "alt", "order", "is_primary"]
 
     def get_image(self, obj):
         req = self.context.get("request")
         return abs_url(req, safe_file_url(getattr(obj, "image", None)))
 
+
 class BundleVideoSerializer(serializers.ModelSerializer):
     url = serializers.SerializerMethodField()
     thumbnailUrl = serializers.SerializerMethodField()
+
     class Meta:
         model = BundleVideo
-        fields = ["id","title","url","thumbnailUrl","order","is_primary","created_at"]
+        fields = ["id", "title", "url", "thumbnailUrl", "order", "is_primary", "created_at"]
 
     def get_url(self, obj):
         req = self.context.get("request")
@@ -225,6 +358,7 @@ class BundleVideoSerializer(serializers.ModelSerializer):
     def get_thumbnailUrl(self, obj):
         req = self.context.get("request")
         return abs_url(req, safe_file_url(getattr(obj, "thumbnail", None))) or ""
+
 
 class BundleSerializer(serializers.ModelSerializer):
     products = ProductItemSerializer(many=True, read_only=True)
@@ -237,9 +371,18 @@ class BundleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Bundle
         fields = [
-            "id","title","slug","products","bundle_price",
-            "image","gallery","images","videos",
-            "active","is_recommended","created_at",
+            "id",
+            "title",
+            "slug",
+            "products",
+            "bundle_price",
+            "image",
+            "gallery",
+            "images",
+            "videos",
+            "active",
+            "is_recommended",
+            "created_at",
         ]
 
     def get_image(self, obj):
@@ -250,32 +393,39 @@ class BundleSerializer(serializers.ModelSerializer):
         req = self.context.get("request")
         out = []
         cover = abs_url(req, safe_file_url(getattr(obj, "image", None)))
-        if cover: out.append(cover)
-        for gi in getattr(obj, "gallery", []).all() if hasattr(obj, "gallery") else []:
-            url = abs_url(req, safe_file_url(getattr(gi, "image", None)))
-            if url: out.append(url)
+        if cover:
+            out.append(cover)
+        if hasattr(obj, "gallery"):
+            for gi in obj.gallery.all():
+                url = abs_url(req, safe_file_url(getattr(gi, "image", None)))
+                if url:
+                    out.append(url)
         seen, uniq = set(), []
         for u in out:
             if u not in seen:
-                uniq.append(u); seen.add(u)
+                uniq.append(u)
+                seen.add(u)
         return uniq
+
 
 # ------------------------- Story -------------------------
 class StorySerializer(serializers.ModelSerializer):
     imageUrl = serializers.SerializerMethodField()
+
     class Meta:
         model = Story
-        fields = ["id","title","imageUrl","link","created_at"]
+        fields = ["id", "title", "imageUrl", "link", "created_at"]
 
     def get_imageUrl(self, obj):
         req = self.context.get("request")
         return abs_url(req, safe_file_url(getattr(obj, "image", None))) or ""
 
+
 # ------------------------- MenuItem (Navigation) -------------------------
 class MenuItemSerializer(serializers.ModelSerializer):
     label = serializers.CharField(source="name")
-    href  = serializers.SerializerMethodField()
-    icon  = serializers.SerializerMethodField()
+    href = serializers.SerializerMethodField()
+    icon = serializers.SerializerMethodField()
     children = serializers.SerializerMethodField()
 
     class Meta:

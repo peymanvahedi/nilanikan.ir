@@ -13,7 +13,13 @@ from catalog.views import (
     home_view,
     ProductVideoViewSet,
     BundleVideoViewSet,
-    menu_view,          # ← اضافه شد
+    menu_view,
+    holoo_ping_view,
+    holoo_products_view,
+    holoo_customers_view,
+    holoo_invoice_create_view,     # ← جدید
+    holoo_preinvoice_create_view,  # ← جدید
+    holoo_order_create_view,       # ← جدید
 )
 from orders.views import CartViewSet, OrderViewSet
 from coupons.views import CouponViewSet
@@ -49,19 +55,30 @@ urlpatterns = [
 
     path("api/home/", home_view, name="home"),
 
-    # 🔑 منوی ادمین (خروجی JSON برای هدر فرانت)
+    # منوی قابل مدیریت
     path("api/v1/menu/", menu_view, name="menu"),
 
+    # احراز هویت
     path("api/auth/me/",       MeView.as_view(),       name="me"),
     path("api/auth/register/", RegisterView.as_view(), name="register"),
     path("api/auth/login/",    LoginView.as_view(),    name="login"),
     path("api/auth/", include("rest_framework.urls", namespace="rest_framework")),
 
+    # سایر اپ‌ها
     path("api/", include("stories.urls")),
     path("api/", include("reviews.urls")),
     path("api/chat/", include("chat.urls")),
 
+    # سلامت
     path("api/health/", health, name="health"),
+
+    # --- Holoo test/proxy endpoints ---
+    path("api/holoo/ping/",        holoo_ping_view,          name="holoo-ping"),
+    path("api/holoo/products/",    holoo_products_view,      name="holoo-products"),
+    path("api/holoo/customers/",   holoo_customers_view,     name="holoo-customers"),
+    path("api/holoo/invoice/",     holoo_invoice_create_view,    name="holoo-invoice-create"),
+    path("api/holoo/pre-invoice/", holoo_preinvoice_create_view, name="holoo-preinvoice-create"),
+    path("api/holoo/order/",       holoo_order_create_view,      name="holoo-order-create"),
 ]
 
 if settings.DEBUG:

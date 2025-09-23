@@ -9,9 +9,8 @@ import ProductTabs from "@/components/ProductTabs";
 import { get, endpoints, absolutizeMedia } from "@/lib/api";
 import AttributePicker, {
   SelectedAttrs,
-  AttributeValue as AV,
+  AttributeValue as AV, // گروه ویژگی‌ها برای AttributePicker (attribute + values[])
 } from "@/components/AttributePicker";
-import ProductSizeNote from "@/components/ProductSizeNote";
 import ProductReviewSummary from "@/components/ProductReviewSummary";
 import CardSlider from "@/components/CardSlider";
 import Breadcrumbs from "@/components/Breadcrumbs";
@@ -23,7 +22,23 @@ type SizeChart = {
   note?: string;
 };
 
-type Variant = { id: number; size: AV; price: number; stock: number };
+// مقدارِ API برای یک AttributeValue روی واریانت‌ها
+type AttrValApi = {
+  id: number;
+  attribute?: string | null;
+  value?: string | null;
+  slug?: string | null;
+  color_code?: string | null;
+  label?: string | null;
+};
+
+type Variant = {
+  id: number;
+  size?: AttrValApi | null;
+  color?: AttrValApi | null;
+  price: number;
+  stock: number;
+};
 
 type VideoItem = {
   id: number;
@@ -38,7 +53,7 @@ type Product = {
   id: number;
   slug?: string;
   name: string;
-  price: number;
+  price?: number | null;
   discount_price?: number | null;
   brand?: string | null;
   description?: string | null;
@@ -46,7 +61,8 @@ type Product = {
   images?: string[];
   gallery?: { id: number; image: string; alt?: string | null }[];
   videos?: VideoItem[] | null;
-  attributes?: AV[] | Record<string, any> | null;
+  // attributes به‌صورت گروهی: [{attribute:"رنگ", values:[...]}]
+  attributes?: AV[] | null;
   size_chart?: SizeChart | null;
   category?: string | number | null;
   category_slug?: string | null;
@@ -55,6 +71,13 @@ type Product = {
   categoryName?: string | null;
   variants?: Variant[] | null;
   stock?: number | null;
+
+  // راهنمای سایز
+  meta?: Record<string, any> | null;
+  size_guide_html?: string | null;
+  size_guide_url?: string | null;
+  size_chart_image?: string | null;
+
   [k: string]: any;
 };
 
@@ -226,6 +249,91 @@ function VideoModal({
   );
 }
 
+/* ============== Size Guide Modal (inline) ============== */
+function SizeGuideModal({
+  open,
+  onClose,
+  title,
+  html,
+  imageUrl,
+  linkUrl,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title?: string | null;
+  html?: string | null;
+  imageUrl?: string | null;
+  linkUrl?: string | null;
+}) {
+  if (!open) return null;
+  return (
+    <div
+      className="fixed inset-0 z-[130] bg-black/60 backdrop-blur-sm"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      dir="rtl"
+    >
+      <div
+        className="absolute inset-0 grid place-items-center p-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white ring-1 ring-zinc-200 shadow-xl">
+          <div className="sticky top-0 flex items-center justify-between px-4 py-3 border-b bg-white">
+            <h3 className="text-base md:text-lg font-extrabold text-zinc-900">
+              {title || "راهنمای سایز"}
+            </h3>
+            <button
+              onClick={onClose}
+              className="h-9 w-9 grid place-items-center rounded-full bg-zinc-100 text-zinc-700"
+              aria-label="بستن"
+              type="button"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24">
+                <path
+                  fill="currentColor"
+                  d="M18.3 5.71 12 12l-6.29-6.29-1.42 1.42L10.59 13.4l-6.3 6.29 1.42 1.42L12 14.83l6.29 6.28 1.42-1.41-6.3-6.3 6.3-6.29z"
+                />
+              </svg>
+            </button>
+          </div>
+
+          <div className="p-4">
+            {html ? (
+              <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: html }} />
+            ) : null}
+
+            {imageUrl ? (
+              <div className="mt-3 rounded-xl overflow-hidden ring-1 ring-zinc-200">
+                <img src={imageUrl} alt="راهنمای سایز" className="w-full h-auto" />
+              </div>
+            ) : null}
+
+            {linkUrl && !html && !imageUrl ? (
+              <a
+                href={linkUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 mt-3 text-pink-700 hover:underline"
+              >
+                مشاهده راهنمای سایز
+                <svg width="16" height="16" viewBox="0 0 24 24">
+                  <path fill="currentColor" d="M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42L17.59 5H14V3Z" />
+                  <path fill="currentColor" d="M5 5h5V3H3v7h2V5Z" />
+                </svg>
+              </a>
+            ) : null}
+
+            {!html && !imageUrl && !linkUrl ? (
+              <div className="text-sm text-zinc-500">راهنمای سایزی ثبت نشده است.</div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ================= Galleries ================= */
 function MobileGallery({
   images, alt, onVideoClick, showVideoBtn,
@@ -321,13 +429,12 @@ export default function ProductPage() {
 
   const [videoOpen, setVideoOpen] = useState(false);
   const [picked, setPicked] = useState<SelectedAttrs>({});
+  const [sizeOpen, setSizeOpen] = useState(false);
 
   const [related, setRelated] = useState<any[]>([]);
   const [relLoading, setRelLoading] = useState(false);
 
-  // برای بردکرامب: وضعیت لینک و نام دسته
   const [catCrumb, setCatCrumb] = useState<{ href?: string; label: string } | null>(null);
-
 
   useEffect(() => {
     let alive = true;
@@ -368,38 +475,31 @@ export default function ProductPage() {
     return reqNames.every((name) => !!picked[name]);
   }, [product?.attributes, picked]);
 
-  // توضیحات HTML
   const descriptionHtml = useMemo(() => {
     const raw = product?.description ?? "";
     const looksLikeHtml = /<\w+[^>]*>/.test(raw);
     return looksLikeHtml ? raw : toDescriptionHtml(raw);
   }, [product?.description]);
 
-  /* ====== شرط اعمال تغییر (فقط برای اسلاگ‌های مشخص) ====== */
-  const targetSlugs = new Set(["lds"]); // اسلاگ‌هایی که می‌خواهی تغییر رویشان اعمال شود
+  /* ====== نمونه‌ی هدف برای انتقال توضیحات به تب سایز (اختیاری) ====== */
+  const targetSlugs = new Set(["lds"]);
   const isTarget = targetSlugs.has((product?.slug ?? slug)?.toLowerCase());
-
-  // تب توضیحات را برای هدف خالی می‌کنیم
   const adjustedDescription = isTarget ? "" : descriptionHtml;
-
-  // توضیحات را به note جدول سایز منتقل می‌کنیم
   const adjustedSizeChart: SizeChart | null = useMemo(() => {
     if (!isTarget) return product?.size_chart ?? null;
-
-    const moved = (product?.description ?? "").trim(); // می‌توانی descriptionHtml بگذاری
+    const moved = (product?.description ?? "").trim();
     const base: SizeChart = product?.size_chart
       ? { ...product.size_chart }
       : { headers: [], rows: [] };
-
     const oldNote = (base.note ?? "").trim();
     const sep = oldNote && moved ? "\n\n" : "";
     return { ...base, note: `${oldNote}${sep}${moved}` };
   }, [isTarget, product?.size_chart, product?.description]);
 
-  // شناسایی وجود سایز/رنگ
+  // شناسایی سایز/رنگ از روی گروه‌های attributes
   const { hasSize, hasColor, sizePicked, colorPicked } = useMemo(() => {
-    const attrs = Array.isArray(product?.attributes) ? (product!.attributes as AV[]) : [];
-    const names = attrs.map((x) => (x.attribute || "").toLowerCase());
+    const groups = Array.isArray(product?.attributes) ? (product!.attributes as AV[]) : [];
+    const names = groups.map((g) => (g.attribute || "").toLowerCase());
     const sizeKeys = ["size", "سایز", "اندازه", "maat", "尺码"].map((s) => s.toLowerCase());
     const colorKeys = ["color", "رنگ", "colour", "لون"].map((s) => s.toLowerCase());
     const hasSize = names.some((n) => sizeKeys.includes(n));
@@ -412,21 +512,71 @@ export default function ProductPage() {
     return { hasSize, hasColor, sizePicked, colorPicked };
   }, [product?.attributes, picked]);
 
-  // Variant انتخاب‌شده
+  // داده‌های راهنمای سایز
+  const sizeGuideHtml =
+    (product as any)?.size_guide_html ?? (product as any)?.meta?.size_guide_html ?? null;
+  const sizeGuideUrlRaw =
+    (product as any)?.size_guide_url ?? (product as any)?.meta?.size_guide_url ?? null;
+  const sizeChartImgRaw =
+    (product as any)?.size_chart_image ?? (product as any)?.meta?.size_chart_image ?? null;
+
+  const sizeGuideUrl = sizeGuideUrlRaw
+    ? (absolutizeMedia(sizeGuideUrlRaw) || sizeGuideUrlRaw)
+    : null;
+  const sizeChartImg = sizeChartImgRaw
+    ? (absolutizeMedia(sizeChartImgRaw) || sizeChartImgRaw)
+    : null;
+  const hasSizeGuide = !!(sizeGuideHtml || sizeGuideUrl || sizeChartImg);
+
+  // کمک‌تابع برای گرفتن id انتخاب‌شده
+  const norm = (s: string) => s.trim().toLowerCase();
+  const sizeKeys = ["size", "سایز", "اندازه", "maat", "尺码"].map(norm);
+  const colorKeys = ["color", "رنگ", "colour", "لون"].map(norm);
+  const getPickedId = (keys: string[]) => {
+    for (const k of Object.keys(picked)) {
+      if (keys.includes(norm(k))) return picked[k]?.id as number | string | undefined;
+    }
+    return undefined;
+  };
+
+  const sizeId = getPickedId(sizeKeys);
+  const colorId = getPickedId(colorKeys);
+
+  // فیلتر واریانت‌ها بر اساس انتخاب‌ها
+  const variantCandidates: Variant[] = useMemo(() => {
+    const vars = product?.variants || [];
+    if (!Array.isArray(vars) || vars.length === 0) return [];
+    return vars.filter((v) => {
+      const okSize = sizeId ? v.size?.id === Number(sizeId) : true;
+      const okColor = colorId ? v.color?.id === Number(colorId) : true;
+      return okSize && okColor;
+    });
+  }, [product?.variants, sizeId, colorId]);
+
+  // اگر هر دو انتخاب شده باشند باید دقیقاً یک واریانت باشد
   const selectedVariant: Variant | null = useMemo(() => {
-    if (!product?.variants || product.variants.length === 0) return null;
-    const keys = Object.keys(picked || {});
-    const pref = ["size", "سایز", "اندازه", "maat", "尺码"].map((s) => s.toLowerCase());
-    const chosenKey = keys.find((k) => pref.includes(k.toLowerCase())) ?? keys[0];
-    const chosen = chosenKey ? picked[chosenKey] : null;
-    if (!chosen) return null;
-    return product.variants.find((v) => v.size?.id === chosen.id) || null;
-  }, [product?.variants, picked]);
+    if (!variantCandidates.length) return null;
+    if (sizeId || colorId) {
+      // اگر هر دو انتخاب کامل‌اند، معمولاً 1 مورد است
+      if (sizeId && colorId) return variantCandidates[0] || null;
+      // اگر یکی انتخاب شده و فقط یک کاندید مانده
+      if (variantCandidates.length === 1) return variantCandidates[0];
+    }
+    return null;
+  }, [variantCandidates, sizeId, colorId]);
+
+  // حداقل قیمت بین کاندیدها (برای وقتی که فقط یکی از ویژگی‌ها انتخاب شده)
+  const candidatesMinPrice: number | undefined = useMemo(() => {
+    if (!variantCandidates.length) return undefined;
+    const prices = variantCandidates.map((v) => Number(v.price)).filter((n) => !Number.isNaN(n));
+    return prices.length ? Math.min(...prices) : undefined;
+  }, [variantCandidates]);
 
   const displayPrice = useMemo(() => {
     if (selectedVariant) return Number(selectedVariant.price);
+    if (candidatesMinPrice != null) return candidatesMinPrice;
     return Number(product?.discount_price ?? product?.price ?? 0);
-  }, [selectedVariant, product?.discount_price, product?.price]);
+  }, [selectedVariant, candidatesMinPrice, product?.discount_price, product?.price]);
 
   const variantInStock = selectedVariant ? (selectedVariant.stock ?? 0) > 0 : true;
   const stockLeft = useMemo(() => {
@@ -445,22 +595,23 @@ export default function ProductPage() {
 
   // ویژگی‌ها برای تب
   const featureLines = useMemo(() => {
-    const attrs = Array.isArray(product?.attributes) ? (product!.attributes as AV[]) : [];
-    if (!attrs.length) return [] as string[];
-    const lines = attrs
-      .map((a) => {
-        const label = String(a.attribute || "").trim();
-        const value = String(a.value || "").trim();
+    const groups = Array.isArray(product?.attributes) ? (product!.attributes as AV[]) : [];
+    if (!groups.length) return [] as string[];
+    const lines = groups.flatMap((g) => {
+      const label = String(g.attribute || "").trim();
+      return (g as any).values?.map((v: any) => {
+        const value = String(v?.label ?? v?.value ?? "").trim();
         if (!label && !value) return null;
         return `${label}${value ? `: ${value}` : ""}`;
-      })
-      .filter(Boolean) as string[];
-    const sizeKeys = ["size", "سایز", "اندازه", "maat", "尺码"].map((s) => s.toLowerCase());
-    const colorKeys = ["color", "رنگ", "colour", "لون"].map((s) => s.toLowerCase());
+      }) ?? [];
+    }).filter(Boolean) as string[];
+
+    const sizeKeys2 = sizeKeys;
+    const colorKeys2 = colorKeys;
     const score = (s: string) => {
       const low = s.toLowerCase();
-      if (sizeKeys.some((k) => low.startsWith(k))) return 0;
-      if (colorKeys.some((k) => low.startsWith(k))) return 1;
+      if (sizeKeys2.some((k) => low.startsWith(k))) return 0;
+      if (colorKeys2.some((k) => low.startsWith(k))) return 1;
       return 2;
     };
     return [...lines].sort((a, b) => score(a) - score(b));
@@ -470,8 +621,7 @@ export default function ProductPage() {
   function toProductCardItem(r: any) {
     const title =
       String(
-        r.title ?? r.name ?? r.product_name ?? r.productTitle ?? r.label ?? r.caption ??
-        r._raw?.title ?? r._raw?.name ?? r._raw?.name_fa ?? r._raw?.title_fa ?? `محصول ${r?.id ?? ""}`
+        r.title ?? r.name ?? r.product_name ?? r.productTitle ?? r.label ?? r.caption ?? r._raw?.title ?? r._raw?.name ?? r._raw?.name_fa ?? r._raw?.title_fa ?? `محصول ${r?.id ?? ""}`
       ) || "محصول";
     const imageUrl =
       r.imageUrl || r.image || r.thumbnail || r.main_image || r.cover || r.photo?.url || r.images?.[0] || "";
@@ -499,6 +649,7 @@ export default function ProductPage() {
           const arr2 = listify(raw2).filter(
             (p: any) => String(p.id) !== String(product.id) && !arr.find((x: any) => x.id === p.id)
           );
+
           arr = [...arr, ...arr2];
         }
         const items = arr.slice(0, 12).map(toProductCardItem);
@@ -584,11 +735,19 @@ export default function ProductPage() {
   const showVideoBtn = videos.length > 0;
 
   const hasDiscount =
-    !!product.discount_price && Number(product.discount_price) < Number(product.price);
+    !!product.discount_price && Number(product.discount_price) < Number(product.price ?? 0);
   const discount =
-    hasDiscount && product.discount_price
+    hasDiscount && product.discount_price && product.price
       ? Math.round((1 - Number(product.discount_price) / Number(product.price)) * 100)
       : 0;
+
+  const showSizeGuideButton =
+    Array.isArray(product.attributes) &&
+    (product.attributes as AV[]).length > 0 &&
+    (product.attributes as AV[]).some(a =>
+      String(a.attribute || "").toLowerCase().includes("size") || /سایز|اندازه/i.test(String(a.attribute || ""))
+    ) &&
+    hasSizeGuide;
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-8" dir="rtl">
@@ -631,7 +790,6 @@ export default function ProductPage() {
         {/* Details */}
         <section className="lg:col-start-2 lg:col-end-3">
           <h1 className="text-lg md:text-xl lg:text-2xl font-bold text-zinc-900">{product.name}</h1>
-
           {product.brand && <div className="mt-2 text-sm text-zinc-500">{product.brand}</div>}
         </section>
 
@@ -640,7 +798,7 @@ export default function ProductPage() {
           <div className="sticky top-4 rounded-2xl border border-zinc-200 p-4 bg-white">
             <div className="text-center">
               {hasDiscount && (
-                <div className="mb-1 flex items.end justify-center gap-3">
+                <div className="mb-1 flex items-end justify-center gap-3">
                   <span className="rounded-lg bg-rose-600 px-2 py-0.5 text-xs font-extrabold text-white">
                     {toFa(discount)}٪
                   </span>
@@ -652,9 +810,22 @@ export default function ProductPage() {
               </div>
             </div>
 
-            {/* انتخاب ویژگی‌ها */}
+            {/* انتخاب ویژگی‌ها + دکمه راهنمای سایز */}
             {Array.isArray(product.attributes) && product.attributes.length > 0 && (
               <div className="mt-4">
+                <div className="flex items-center justify-between mb-1">
+                  <div className="text-xs font-bold text-zinc-700">انتخاب ویژگی‌ها</div>
+                  {showSizeGuideButton && (
+                    <button
+                      type="button"
+                      onClick={() => setSizeOpen(true)}
+                      className="text-xs font-bold text-pink-700 hover:text-pink-800"
+                    >
+                      راهنمای سایز
+                    </button>
+                  )}
+                </div>
+
                 <AttributePicker attributes={product.attributes as AV[]} selected={picked} onChange={setPicked} />
 
                 {guidanceMessage && (
@@ -697,7 +868,7 @@ export default function ProductPage() {
       {/* Tabs */}
       <section className="mt-12">
         <ProductTabs
-          showFeatures={false}   // 👈 تب ویژگی‌ها حذف می‌شود
+          showFeatures={false}
           features={featureLines}
           description={adjustedDescription}
           sizeChart={adjustedSizeChart}
@@ -725,10 +896,16 @@ export default function ProductPage() {
       )}
 
       {/* ویدیو فقط در مودال */}
-      <VideoModal
-        open={videoOpen}
-        onClose={() => setVideoOpen(false)}
-        video={videos[0] ?? null}
+      <VideoModal open={videoOpen} onClose={() => setVideoOpen(false)} video={videos[0] ?? null} />
+
+      {/* مودال راهنمای سایز */}
+      <SizeGuideModal
+        open={sizeOpen}
+        onClose={() => setSizeOpen(false)}
+        title={`راهنمای سایز ${product.name}`}
+        html={sizeGuideHtml}
+        imageUrl={sizeChartImg}
+        linkUrl={sizeGuideUrl}
       />
     </main>
   );

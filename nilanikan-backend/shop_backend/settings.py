@@ -1,34 +1,35 @@
+# settings.py
 import os
 from pathlib import Path
-from dotenv import load_dotenv
 from datetime import timedelta
+from dotenv import load_dotenv
 
 load_dotenv()
 
-def _split_env_list(name, default=""):
-    val = os.getenv(name, default)
-    return [x.strip() for x in val.split(",") if x.strip()]
-
 def _env_bool(name, default=False):
-    val = os.getenv(name)
-    if val is None:
+    v = os.getenv(name)
+    if v is None:
         return default
-    return val.lower() in ("1", "true", "yes", "on")
+    return v.lower() in ("1", "true", "yes", "on")
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# ───────── Core ─────────
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-insecure-change-me")
 DEBUG = _env_bool("DJANGO_DEBUG", True)
 
-# ---------- Hosts ----------
+# ───────── Hosts ─────────
 ALLOWED_HOSTS = [
-    '192.168.69.17',     # ← IP جدید
-    '127.0.0.1',
-    'localhost',
-    '0.0.0.0',
-    'backend',
-    'frontend',
+    "127.0.0.1",
+    "localhost",
+    "0.0.0.0",
+    "backend",
+    "frontend",
+    "192.168.28.17",   # ← آی‌پی بک‌اند روی شبکه فعلی
+    "192.168.69.17",   # ← اگر قبلاً از این IP استفاده می‌کردی
 ]
 
+# ───────── Apps ─────────
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -53,10 +54,11 @@ INSTALLED_APPS = [
     "chat",
 ]
 
+# ───────── Middleware (CORS باید بالای Common باشد) ─────────
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
-    "corsheaders.middleware.CorsMiddleware",
+    "corsheaders.middleware.CorsMiddleware",  # ← مهم
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -86,6 +88,7 @@ TEMPLATES = [
 WSGI_APPLICATION = "shop_backend.wsgi.application"
 ASGI_APPLICATION = "shop_backend.asgi.application"
 
+# ───────── DB ─────────
 DATABASE_URL = os.getenv("DATABASE_URL")
 if DATABASE_URL:
     import dj_database_url
@@ -93,22 +96,16 @@ if DATABASE_URL:
 else:
     DATABASES = {
         "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
+            "ENGINE": os.getenv("DB_ENGINE", "django.db.backends.sqlite3"),
+            "NAME": os.getenv("DB_NAME", BASE_DIR / "db.sqlite3"),
+            "USER": os.getenv("DB_USER", ""),
+            "PASSWORD": os.getenv("DB_PASSWORD", ""),
+            "HOST": os.getenv("DB_HOST", ""),
+            "PORT": os.getenv("DB_PORT", ""),
         }
     }
 
-if os.getenv("DB_ENGINE"):
-    DATABASES["default"] = {
-        "ENGINE": os.getenv("DB_ENGINE", "django.db.backends.postgresql"),
-        "NAME": os.getenv("DB_NAME", "shop"),
-        "USER": os.getenv("DB_USER", "shopuser"),
-        "PASSWORD": os.getenv("DB_PASSWORD", "shoppass"),
-        "HOST": os.getenv("DB_HOST", "db"),
-        "PORT": os.getenv("DB_PORT", "5432"),
-        "CONN_MAX_AGE": 60,
-    }
-
+# ───────── Auth ─────────
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
@@ -121,6 +118,7 @@ TIME_ZONE = "Asia/Tehran"
 USE_I18N = True
 USE_TZ = True
 
+# ───────── Static/Media ─────────
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STORAGES = {
@@ -131,6 +129,7 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# ───────── DRF / JWT ─────────
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
@@ -145,20 +144,24 @@ SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
-# ---------- CORS / CSRF ----------
+# ───────── CORS / CSRF ─────────
 CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:3000",
     "http://localhost:3000",
-    "http://192.168.69.17:3000",  # ← IP جدید فرانت
+    "http://192.168.28.17:3000",  # ← فرانت روی همین ماشین/شبکه
+    "http://192.168.69.17:3000",  # ← اگر گاهی با این IP بالا می‌آید
 ]
 CORS_ALLOW_CREDENTIALS = True
 
 CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:8000",
-    "http://127.0.0.1:8000",
-    "http://localhost:3000",
     "http://127.0.0.1:3000",
-    "http://192.168.69.17:3000",  # ← IP جدید فرانت
+    "http://localhost:3000",
+    "http://192.168.28.17:3000",
+    "http://192.168.69.17:3000",
+    "http://127.0.0.1:8000",
+    "http://localhost:8000",
+    "http://192.168.28.17:8000",
+    "http://192.168.69.17:8000",
 ]
 
 USE_X_FORWARDED_HOST = True
@@ -168,6 +171,7 @@ SESSION_COOKIE_SECURE = False
 CSRF_COOKIE_SECURE = False
 APPEND_SLASH = True
 
+# ───────── سایر ─────────
 GUEST_USER_ID = int(os.getenv("GUEST_USER_ID", "1"))
 
 ZARINPAL_MODE = os.getenv("ZARINPAL_MODE", "sandbox").lower()
@@ -176,7 +180,7 @@ ZARINPAL_MERCHANT_ID = os.getenv(
     "7be9a33e-e18b-4731-9320-99c4a1053e92"
 )
 
-_default_host = os.getenv("LOCAL_HOST_IP", "192.168.69.17")
+_default_host = os.getenv("LOCAL_HOST_IP", "192.168.28.17")  # ← به آی‌پی فعلی ست شد
 ZARINPAL_CALLBACK_URL = os.getenv(
     "ZARINPAL_CALLBACK_URL",
     f"http://{_default_host}:8000/api/orders/payment/callback/"
@@ -191,7 +195,5 @@ ZARINPAL_FAIL_REDIRECT = os.getenv(
 )
 
 CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels.layers.InMemoryChannelLayer"
-    }
+    "default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}
 }
